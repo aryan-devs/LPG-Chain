@@ -1,27 +1,32 @@
 package com.lpgchain.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDateTime;
 
+@Schema(description = "Request payload for creating a new LPG cylinder booking")
 public class BookingRequestDTO {
 
     @NotNull(message = "customerId is required")
+    @Schema(description = "Customer ID creating the booking", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long customerId;
 
-    // Optional: distributor assignment is a separate operation
+    @Schema(description = "Optional assigned distributor ID (can be assigned later by administrator)", example = "1")
     private Long distributorId;
 
     @NotBlank(message = "deliveryAddress is required")
+    @Schema(description = "Physical address for cylinder delivery", example = "Flat 402, Green Valley Apartments, Mumbai", requiredMode = Schema.RequiredMode.REQUIRED)
     private String deliveryAddress;
 
-    // Optional: defaults to LocalDateTime.now() in service
+    @Schema(description = "Scheduled booking timestamp (defaults to current time if null)", example = "2026-09-15T10:00:00")
     private LocalDateTime bookingDate;
 
     @NotNull(message = "quantity is required")
     @Min(value = 1, message = "quantity must be at least 1")
+    @Schema(description = "Number of LPG cylinders requested", example = "2", minimum = "1", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer quantity;
 
     public BookingRequestDTO() {

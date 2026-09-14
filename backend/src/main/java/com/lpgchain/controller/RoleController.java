@@ -1,7 +1,18 @@
 package com.lpgchain.controller;
 
+import com.lpgchain.config.OpenApiConfig;
 import com.lpgchain.entity.Role;
+import com.lpgchain.exception.ErrorResponse;
 import com.lpgchain.service.RoleService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,8 +25,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * RoleController — REST controller for managing application roles.
+ */
 @RestController
 @RequestMapping("/api/roles")
+@Tag(name = "Roles", description = "Application role management and definition")
+@SecurityRequirement(name = OpenApiConfig.SECURITY_SCHEME_NAME)
 public class RoleController {
 
     private final RoleService roleService;
@@ -25,25 +41,55 @@ public class RoleController {
     }
 
     @GetMapping
+    @Operation(summary = "Get All Roles", description = "Retrieves all defined application roles. Requires authentication.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "List of roles retrieved",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = Role.class)))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized - Missing or invalid JWT",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<List<Role>> getAllRoles() {
         return ResponseEntity.ok(roleService.getAllRoles());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Role> getRoleById(@PathVariable Long id) {
+    @Operation(summary = "Get Role by ID", description = "Retrieves a specific role by its ID. Requires authentication.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Role found",
+                    content = @Content(schema = @Schema(implementation = Role.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Role not found")
+    })
+    public ResponseEntity<Role> getRoleById(
+            @Parameter(description = "Role ID", example = "1") @PathVariable Long id) {
         return roleService.getRoleById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
+    @Operation(summary = "Create Role", description = "Creates a new application role. Requires authentication.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Role created",
+                    content = @Content(schema = @Schema(implementation = Role.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
     public ResponseEntity<Role> createRole(@RequestBody Role role) {
         Role savedRole = roleService.saveRole(role);
         return ResponseEntity.status(HttpStatus.CREATED).body(savedRole);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteRole(@PathVariable Long id) {
+    @Operation(summary = "Delete Role", description = "Deletes a role by ID. Requires authentication.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Role deleted successfully"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> deleteRole(
+            @Parameter(description = "Role ID", example = "1") @PathVariable Long id) {
         roleService.deleteRole(id);
         return ResponseEntity.noContent().build();
     }

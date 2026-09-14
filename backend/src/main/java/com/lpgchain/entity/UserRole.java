@@ -7,7 +7,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
 @Entity
+@Table(name = "user_role", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_user_role", columnNames = {"user_id", "role"})
+})
 public class UserRole {
 
     @Id

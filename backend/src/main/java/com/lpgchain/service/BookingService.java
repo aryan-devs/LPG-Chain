@@ -1,28 +1,34 @@
 package com.lpgchain.service;
 
 import com.lpgchain.dto.BookingRequestDTO;
+import com.lpgchain.dto.BookingResponseDTO;
 import com.lpgchain.entity.Booking;
 import com.lpgchain.entity.Distributor;
+import com.lpgchain.entity.DistributorMembership;
 import com.lpgchain.entity.User;
+import com.lpgchain.mapper.EntityMapper;
 import com.lpgchain.repository.BookingRepository;
+import com.lpgchain.repository.DistributorMembershipRepository;
 import com.lpgchain.repository.DistributorRepository;
 import com.lpgchain.repository.UserRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 @Service
 public class BookingService {
 
-    private static final Set<String> VALID_STATUSES = Set.of(
+    public static final Set<String> VALID_STATUSES = Set.of(
             "PENDING", "CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"
     );
 
-    private static final Map<String, Set<String>> ALLOWED_TRANSITIONS = Map.of(
+    public static final Map<String, Set<String>> ALLOWED_TRANSITIONS = Map.of(
             "PENDING",          Set.of("CONFIRMED", "CANCELLED"),
             "CONFIRMED",        Set.of("OUT_FOR_DELIVERY", "CANCELLED"),
             "OUT_FOR_DELIVERY", Set.of("DELIVERED"),
@@ -33,29 +39,76 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final DistributorRepository distributorRepository;
     private final UserRepository userRepository;
+    private final EntityMapper entityMapper;
+    private final BookingAuthorizationService bookingAuthorizationService;
+    private final DistributorMembershipRepository distributorMembershipRepository;
 
     public BookingService(BookingRepository bookingRepository,
                           DistributorRepository distributorRepository,
-                          UserRepository userRepository) {
+                          UserRepository userRepository,
+                          EntityMapper entityMapper,
+                          BookingAuthorizationService bookingAuthorizationService,
+                          DistributorMembershipRepository distributorMembershipRepository) {
         this.bookingRepository = bookingRepository;
         this.distributorRepository = distributorRepository;
         this.userRepository = userRepository;
+        this.entityMapper = entityMapper;
+        this.bookingAuthorizationService = bookingAuthorizationService;
+        this.distributorMembershipRepository = distributorMembershipRepository;
     }
 
-    public List<Booking> getAllBookings() {
-        return bookingRepository.findAll();
+    public List<BookingResponseDTO> getAllBookings() {
+        Authentication auth = bookingAuthorizationService.getAuthentication();
+        if (bookingAuthorizationService.isAdmin(auth)) {
+            return bookingRepository.findAll().stream()
+                    .map(entityMapper::toBookingResponseDTO)
+                    .toList();
+        }
+
+        User currentUser = bookingAuthorizationService.getAuthenticatedUser();
+
+        if (bookingAuthorizationService.isCustomer(auth)) {
+            return bookingRepository.findByCustomerId(currentUser.getId()).stream()
+                    .map(entityMapper::toBookingResponseDTO)
+                    .toList();
+        }
+
+        if (bookingAuthorizationService.isDistributor(auth)) {
+            List<DistributorMembership> memberships = distributorMembershipRepository.findByUserId(currentUser.getId());
+            return memberships.stream()
+                    .map(DistributorMembership::getDistributor)
+                    .filter(Objects::nonNull)
+                    .map(Distributor::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .flatMap(distId -> bookingRepository.findByDistributorId(distId).stream())
+                    .map(entityMapper::toBookingResponseDTO)
+                    .toList();
+        }
+
+        return List.of();
     }
 
-    public Optional<Booking> getBookingById(Long id) {
-        return bookingRepository.findById(id);
+    public Optional<BookingResponseDTO> getBookingById(Long id) {
+        Optional<Booking> optional = bookingRepository.findById(id);
+        if (optional.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Booking booking = optional.get();
+        // ReBAC authorization check: Customer must own, Distributor must be assigned, Admin allowed
+        bookingAuthorizationService.checkCanAccessBooking(booking);
+
+        return Optional.of(entityMapper.toBookingResponseDTO(booking));
     }
 
     /**
      * Creates a new booking from a validated BookingRequestDTO.
-     * Resolves customer and optional distributor from their IDs.
-     * Forces status = PENDING and defaults bookingDate to now().
+     * Enforces that customers create bookings only for their authenticated user ID.
      */
     public StatusUpdateResult createBookingFromDTO(BookingRequestDTO dto) {
+        bookingAuthorizationService.checkCanCreateBooking(dto);
+
         Optional<User> customerOpt = userRepository.findById(dto.getCustomerId());
         if (customerOpt.isEmpty()) {
             return StatusUpdateResult.notFound();
@@ -76,7 +129,8 @@ public class BookingService {
             booking.setDistributor(distributorOpt.get());
         }
 
-        return StatusUpdateResult.success(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+        return StatusUpdateResult.success(entityMapper.toBookingResponseDTO(savedBooking));
     }
 
     /**
@@ -92,23 +146,32 @@ public class BookingService {
     }
 
     public void deleteBooking(Long id) {
+        bookingAuthorizationService.checkCanDeleteBooking();
         bookingRepository.deleteById(id);
     }
 
-    public List<Booking> getBookingsByCustomerId(Long customerId) {
-        return bookingRepository.findByCustomerId(customerId);
+    public List<BookingResponseDTO> getBookingsByCustomerId(Long customerId) {
+        bookingAuthorizationService.checkCanAccessCustomerBookings(customerId);
+        return bookingRepository.findByCustomerId(customerId).stream()
+                .map(entityMapper::toBookingResponseDTO)
+                .toList();
     }
 
-    public List<Booking> getBookingsByDistributorId(Long distributorId) {
-        return bookingRepository.findByDistributorId(distributorId);
+    public List<BookingResponseDTO> getBookingsByDistributorId(Long distributorId) {
+        bookingAuthorizationService.checkCanAccessDistributorBookings(distributorId);
+        return bookingRepository.findByDistributorId(distributorId).stream()
+                .map(entityMapper::toBookingResponseDTO)
+                .toList();
     }
 
     /**
      * Assigns a Distributor to a Booking.
+     * Restricted to administrators.
      * The booking must be in PENDING status.
-     * Does not change the booking status.
      */
     public StatusUpdateResult assignDistributor(Long bookingId, Long distributorId) {
+        bookingAuthorizationService.checkCanAssignDistributor();
+
         Optional<Booking> bookingOpt = bookingRepository.findById(bookingId);
         if (bookingOpt.isEmpty()) {
             return StatusUpdateResult.notFound();
@@ -128,27 +191,31 @@ public class BookingService {
         }
 
         booking.setDistributor(distributorOpt.get());
-        return StatusUpdateResult.success(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+        return StatusUpdateResult.success(entityMapper.toBookingResponseDTO(savedBooking));
     }
 
     /**
      * Updates the status of a booking.
-     * Returns empty Optional if booking not found.
-     * Returns error message String if status is invalid or transition is not allowed.
-     * Returns updated Booking on success.
+     * Enforces ReBAC (ownership / assignment) and ABAC (action validity & state machine transitions).
      */
     public StatusUpdateResult updateBookingStatus(Long id, String newStatus) {
-        if (!VALID_STATUSES.contains(newStatus)) {
-            return StatusUpdateResult.invalid("Invalid status: " + newStatus +
-                    ". Allowed values: " + VALID_STATUSES);
-        }
-
         Optional<Booking> optional = bookingRepository.findById(id);
         if (optional.isEmpty()) {
             return StatusUpdateResult.notFound();
         }
 
         Booking booking = optional.get();
+
+        // 1. ReBAC + ABAC authorization check (throws AccessDeniedException for 403 Forbidden)
+        bookingAuthorizationService.checkCanUpdateBookingStatus(booking, newStatus);
+
+        // 2. Business condition validation (returns invalid for 400 Bad Request)
+        if (!VALID_STATUSES.contains(newStatus)) {
+            return StatusUpdateResult.invalid("Invalid status: " + newStatus +
+                    ". Allowed values: " + VALID_STATUSES);
+        }
+
         String currentStatus = booking.getStatus();
         Set<String> allowed = ALLOWED_TRANSITIONS.getOrDefault(currentStatus, Set.of());
 
@@ -158,8 +225,10 @@ public class BookingService {
         }
 
         booking.setStatus(newStatus);
-        return StatusUpdateResult.success(bookingRepository.save(booking));
+        Booking savedBooking = bookingRepository.save(booking);
+        return StatusUpdateResult.success(entityMapper.toBookingResponseDTO(savedBooking));
     }
+
 
     // ─── Inner result type to communicate outcome without throwing exceptions ───
 
@@ -167,16 +236,16 @@ public class BookingService {
         public enum Type { SUCCESS, NOT_FOUND, INVALID }
 
         private final Type type;
-        private final Booking booking;
+        private final BookingResponseDTO booking;
         private final String errorMessage;
 
-        private StatusUpdateResult(Type type, Booking booking, String errorMessage) {
+        private StatusUpdateResult(Type type, BookingResponseDTO booking, String errorMessage) {
             this.type = type;
             this.booking = booking;
             this.errorMessage = errorMessage;
         }
 
-        public static StatusUpdateResult success(Booking booking) {
+        public static StatusUpdateResult success(BookingResponseDTO booking) {
             return new StatusUpdateResult(Type.SUCCESS, booking, null);
         }
 
@@ -189,7 +258,7 @@ public class BookingService {
         }
 
         public Type getType() { return type; }
-        public Booking getBooking() { return booking; }
+        public BookingResponseDTO getBooking() { return booking; }
         public String getErrorMessage() { return errorMessage; }
     }
 }

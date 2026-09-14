@@ -46,6 +46,12 @@ out/
 *.jks
 *.keystore
 
+# --- Local developer secrets (Spring Boot env overrides) ---
+# Place DB_URL / DB_USERNAME / DB_PASSWORD here — never commit this file.
+backend/.env
+backend/**/.env
+**/application-local.properties
+
 # --- IDE & Editor Files ---
 .idea/
 *.iml

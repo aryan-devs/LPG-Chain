@@ -6,8 +6,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import jakarta.persistence.UniqueConstraint;
+
 @Entity
-@Table(name = "users")
+@Table(name = "users", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_users_email", columnNames = {"email"})
+})
 public class User {
 
     @Id
@@ -20,6 +24,10 @@ public class User {
 
     private String password;
 
+    private String phone;
+
+    private String address;
+
     public User() {
     }
 
@@ -29,11 +37,28 @@ public class User {
         this.password = password;
     }
 
+    public User(String name, String email, String password, String phone, String address) {
+        this.name = name;
+        this.email = email;
+        this.password = password;
+        this.phone = phone;
+        this.address = address;
+    }
+
     public User(Long id, String name, String email, String password) {
         this.id = id;
         this.name = name;
         this.email = email;
         this.password = password;
+    }
+
+    public User(Long id, String name, String email, String password, String phone, String address) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.password = password;
+        this.phone = phone;
+        this.address = address;
     }
 
     public Long getId() { return id; }
@@ -47,4 +72,10 @@ public class User {
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
 }

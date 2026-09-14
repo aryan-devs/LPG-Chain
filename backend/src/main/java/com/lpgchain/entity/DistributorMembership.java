@@ -7,7 +7,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
 @Entity
+@Table(name = "distributor_membership", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_user_distributor", columnNames = {"user_id", "distributor_id"})
+})
 public class DistributorMembership {
 
     @Id
