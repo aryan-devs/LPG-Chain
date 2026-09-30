@@ -1,13 +1,26 @@
 package com.lpgchain.entity;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "distributor",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_distributor_licence", columnNames = {"licence_number"})
+        },
+        indexes = {
+                @Index(name = "idx_distributor_licence", columnList = "licence_number"),
+                @Index(name = "idx_distributor_status", columnList = "status")
+        }
+)
 public class Distributor {
 
     @Id
@@ -15,6 +28,8 @@ public class Distributor {
     private Long id;
 
     private String agencyName;
+
+    @Column(name = "licence_number", unique = true)
     private String licenceNumber;
     private String contactNumber;
     private String address;

@@ -1,26 +1,38 @@
 package com.lpgchain.entity;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 import java.time.LocalDateTime;
 
 @Entity
+@Table(name = "booking",
+        indexes = {
+                @Index(name = "idx_booking_customer_id", columnList = "customer_id"),
+                @Index(name = "idx_booking_distributor_id", columnList = "distributor_id"),
+                @Index(name = "idx_booking_status", columnList = "status"),
+                @Index(name = "idx_booking_date", columnList = "bookingDate"),
+                @Index(name = "idx_booking_customer_date", columnList = "customer_id, bookingDate")
+        }
+)
 public class Booking {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "customer_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "customer_id", nullable = false)
     private User customer;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "distributor_id")
     private Distributor distributor;
 

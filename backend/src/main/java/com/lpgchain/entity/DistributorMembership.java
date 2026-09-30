@@ -1,31 +1,39 @@
 package com.lpgchain.entity;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 @Entity
-@Table(name = "distributor_membership", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_user_distributor", columnNames = {"user_id", "distributor_id"})
-})
+@Table(name = "distributor_membership",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_user_distributor", columnNames = {"user_id", "distributor_id"})
+        },
+        indexes = {
+                @Index(name = "idx_dist_mem_user_id", columnList = "user_id"),
+                @Index(name = "idx_dist_mem_dist_id", columnList = "distributor_id"),
+                @Index(name = "idx_dist_mem_user_status", columnList = "user_id, status")
+        }
+)
 public class DistributorMembership {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne
-    @JoinColumn(name = "distributor_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "distributor_id", nullable = false)
     private Distributor distributor;
 
     private String membershipRole;

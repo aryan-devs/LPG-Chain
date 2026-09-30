@@ -77,6 +77,35 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles business logic rule and validation errors (e.g. invalid status transitions,
+     * unavailable driver/vehicle, mismatched distributor, duplicate records).
+     * Returns a structured 400 Bad Request response.
+     */
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    public ResponseEntity<ErrorResponse> handleBusinessValidationException(RuntimeException ex) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.BAD_REQUEST.value(),
+                ex.getMessage() != null && !ex.getMessage().isBlank() ? ex.getMessage() : "Bad request",
+                Map.of()
+        );
+        return ResponseEntity.badRequest().body(errorResponse);
+    }
+
+    /**
+     * Handles ResourceNotFoundException when a requested entity (Vehicle, Delivery, Location, etc.)
+     * is not found in the system. Returns a structured 404 Not Found response.
+     */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleResourceNotFoundException(ResourceNotFoundException ex) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.NOT_FOUND.value(),
+                ex.getMessage() != null && !ex.getMessage().isBlank() ? ex.getMessage() : "Resource not found",
+                Map.of()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+    }
+
+    /**
      * Catch-all handler for any unexpected exception.
      * Returns a safe 500 response without exposing internal details.
      */

@@ -13,6 +13,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -30,6 +31,7 @@ import java.util.Set;
  *  - Prevention of privilege escalation by MANAGER / STAFF.
  */
 @Service
+@Transactional(readOnly = true)
 public class DistributorMembershipService {
 
     private static final Set<String> VALID_MEMBERSHIP_ROLES = Set.of("OWNER", "MANAGER", "STAFF");
@@ -86,6 +88,7 @@ public class DistributorMembershipService {
      * Authorization: Caller must be ADMIN or an active OWNER of the target distributor.
      * Rejects MANAGER, STAFF, CUSTOMER, or unassociated callers with 403 Forbidden.
      */
+    @Transactional
     public DistributorMembershipResponseDTO createMembership(DistributorMembershipRequestDTO request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
@@ -206,6 +209,7 @@ public class DistributorMembershipService {
      * Deletes a membership.
      * Authorization: Caller must be ADMIN or an active OWNER of the distributor.
      */
+    @Transactional
     public void deleteMembership(Long id) {
         DistributorMembership membership = distributorMembershipRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Membership not found with ID: " + id));
@@ -257,6 +261,7 @@ public class DistributorMembershipService {
         return distributorMembershipRepository.findAll();
     }
 
+    @Transactional
     public DistributorMembership saveMembership(DistributorMembership membership) {
         return distributorMembershipRepository.save(membership);
     }

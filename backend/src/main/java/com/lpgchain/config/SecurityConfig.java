@@ -90,10 +90,23 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/health/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/health").permitAll()
 
+                // Public WebSocket handshake endpoint (STOMP frames enforce JWT authentication and ReBAC)
+                .requestMatchers("/ws/**", "/ws").permitAll()
+
                 // Role-Based Access Control (RBAC) restrictions
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/distributor/**").hasRole("DISTRIBUTOR")
                 .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
+
+                // Driver and Vehicle management: restricted to ADMIN and DISTRIBUTOR
+                .requestMatchers("/api/drivers/**").hasAnyRole("ADMIN", "DISTRIBUTOR")
+                .requestMatchers("/api/vehicles/**").hasAnyRole("ADMIN", "DISTRIBUTOR")
+
+                // Delivery operations require authentication (fine-grained ReBAC enforced in service layer)
+                .requestMatchers("/api/deliveries/**").authenticated()
+
+                // GPS Tracking operations require authentication (fine-grained ReBAC enforced in service layer)
+                .requestMatchers("/api/tracking/**").authenticated()
 
                 // All other endpoints require authentication
                 .anyRequest().authenticated()

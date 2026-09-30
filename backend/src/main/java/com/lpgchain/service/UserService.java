@@ -11,6 +11,7 @@ import com.lpgchain.repository.UserRoleRepository;
 import com.lpgchain.security.PasswordService;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -28,6 +29,7 @@ import java.util.Optional;
  *    are strictly rejected with AccessDeniedException (403 Forbidden).
  */
 @Service
+@Transactional(readOnly = true)
 public class UserService {
 
     private final UserRepository userRepository;
@@ -66,6 +68,7 @@ public class UserService {
      * Creates a new user from a UserRequestDTO with email format validation
      * and privilege escalation prevention.
      */
+    @Transactional
     public UserResponseDTO createUser(UserRequestDTO request) {
         if (request == null) {
             throw new IllegalArgumentException("User request cannot be null");
@@ -110,6 +113,7 @@ public class UserService {
      * The raw password supplied in the request body is NEVER stored,
      * and the response is mapped to UserResponseDTO without password.
      */
+    @Transactional
     public UserResponseDTO saveUser(User user) {
         if (user.getPassword() != null && !user.getPassword().isEmpty()) {
             user.setPassword(passwordService.encode(user.getPassword()));
@@ -118,6 +122,7 @@ public class UserService {
         return entityMapper.toUserResponseDTO(savedUser);
     }
 
+    @Transactional
     public void deleteUser(Long id) {
         userRepository.deleteById(id);
     }

@@ -3,11 +3,13 @@ package com.lpgchain.service;
 import com.lpgchain.entity.Distributor;
 import com.lpgchain.repository.DistributorRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
 
 @Service
+@Transactional(readOnly = true)
 public class DistributorService {
 
     private final DistributorRepository distributorRepository;
@@ -24,10 +26,12 @@ public class DistributorService {
         return distributorRepository.findById(id);
     }
 
+    @Transactional
     public Distributor saveDistributor(Distributor distributor) {
         return distributorRepository.save(distributor);
     }
 
+    @Transactional
     public void deleteDistributor(Long id) {
         distributorRepository.deleteById(id);
     }

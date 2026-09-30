@@ -97,4 +97,99 @@ public class EntityMapper {
         dto.setStatus(membership.getStatus());
         return dto;
     }
+
+    /**
+     * Maps a Driver entity to DriverResponseDTO.
+     */
+    public com.lpgchain.dto.DriverResponseDTO toDriverResponseDTO(com.lpgchain.entity.Driver driver) {
+        if (driver == null) {
+            return null;
+        }
+
+        Distributor distributor = driver.getDistributor();
+        com.lpgchain.dto.DriverResponseDTO dto = new com.lpgchain.dto.DriverResponseDTO();
+        dto.setId(driver.getId());
+        dto.setName(driver.getName());
+        dto.setPhone(driver.getPhone());
+        dto.setLicenseNumber(driver.getLicenseNumber());
+        dto.setStatus(driver.getStatus());
+        dto.setDistributorId(distributor != null ? distributor.getId() : null);
+        dto.setDistributorName(distributor != null ? distributor.getAgencyName() : null);
+        return dto;
+    }
+
+    /**
+     * Maps a Vehicle entity to VehicleResponseDTO.
+     */
+    public com.lpgchain.dto.VehicleResponseDTO toVehicleResponseDTO(com.lpgchain.entity.Vehicle vehicle) {
+        if (vehicle == null) {
+            return null;
+        }
+
+        Distributor distributor = vehicle.getDistributor();
+        com.lpgchain.dto.VehicleResponseDTO dto = new com.lpgchain.dto.VehicleResponseDTO();
+        dto.setId(vehicle.getId());
+        dto.setVehicleNumber(vehicle.getVehicleNumber());
+        dto.setVehicleType(vehicle.getVehicleType());
+        dto.setCapacity(vehicle.getCapacity());
+        dto.setStatus(vehicle.getStatus());
+        dto.setDistributorId(distributor != null ? distributor.getId() : null);
+        dto.setDistributorName(distributor != null ? distributor.getAgencyName() : null);
+        dto.setTraccarDeviceId(vehicle.getTraccarDeviceId());
+        return dto;
+    }
+
+    /**
+     * Maps a Delivery entity to DeliveryResponseDTO, flattening associations cleanly.
+     */
+    public com.lpgchain.dto.DeliveryResponseDTO toDeliveryResponseDTO(com.lpgchain.entity.Delivery delivery) {
+        if (delivery == null) {
+            return null;
+        }
+
+        Booking booking = delivery.getBooking();
+        User customer = booking != null ? booking.getCustomer() : null;
+        com.lpgchain.entity.Driver driver = delivery.getDriver();
+        com.lpgchain.entity.Vehicle vehicle = delivery.getVehicle();
+        Distributor distributor = delivery.getDistributor();
+
+        com.lpgchain.dto.DeliveryResponseDTO dto = new com.lpgchain.dto.DeliveryResponseDTO();
+        dto.setId(delivery.getId());
+        dto.setBookingId(booking != null ? booking.getId() : null);
+        dto.setCustomerId(customer != null ? customer.getId() : null);
+        dto.setCustomerName(customer != null ? customer.getName() : null);
+        dto.setDriverId(driver != null ? driver.getId() : null);
+        dto.setDriverName(driver != null ? driver.getName() : null);
+        dto.setVehicleId(vehicle != null ? vehicle.getId() : null);
+        dto.setVehicleNumber(vehicle != null ? vehicle.getVehicleNumber() : null);
+        dto.setDistributorId(distributor != null ? distributor.getId() : null);
+        dto.setDistributorName(distributor != null ? distributor.getAgencyName() : null);
+        dto.setStatus(delivery.getStatus());
+        dto.setAssignedAt(delivery.getAssignedAt());
+        dto.setPickedUpAt(delivery.getPickedUpAt());
+        dto.setOutForDeliveryAt(delivery.getOutForDeliveryAt());
+        dto.setDeliveredAt(delivery.getDeliveredAt());
+        return dto;
+    }
+
+    /**
+     * Maps a VehicleLocation entity to VehicleLocationResponseDTO cleanly without circular references.
+     */
+    public com.lpgchain.dto.VehicleLocationResponseDTO toVehicleLocationResponseDTO(com.lpgchain.entity.VehicleLocation location) {
+        if (location == null) {
+            return null;
+        }
+
+        com.lpgchain.entity.Vehicle vehicle = location.getVehicle();
+        com.lpgchain.dto.VehicleLocationResponseDTO dto = new com.lpgchain.dto.VehicleLocationResponseDTO();
+        dto.setId(location.getId());
+        dto.setVehicleId(vehicle != null ? vehicle.getId() : null);
+        dto.setVehicleNumber(vehicle != null ? vehicle.getVehicleNumber() : null);
+        dto.setLatitude(location.getLatitude());
+        dto.setLongitude(location.getLongitude());
+        dto.setSpeed(location.getSpeed());
+        dto.setHeading(location.getHeading());
+        dto.setRecordedAt(location.getRecordedAt());
+        return dto;
+    }
 }

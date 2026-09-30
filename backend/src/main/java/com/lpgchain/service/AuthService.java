@@ -21,11 +21,13 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * AuthService — Orchestrates user authentication, multi-role detection,
@@ -64,6 +66,7 @@ public class AuthService {
      * Enforces role-specific email policy on single-role active tokens.
      * If multi-role user, returns roles and requires role selection.
      */
+    @Transactional
     public LoginResponseDTO login(LoginRequestDTO request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(InvalidCredentialsException::new);
@@ -157,6 +160,7 @@ public class AuthService {
      * Selects an active role for the authenticated user and generates a new active-role JWT.
      * Enforces role-specific official email policy for the chosen active role.
      */
+    @Transactional(readOnly = true)
     public LoginResponseDTO selectRole(RoleSelectionRequestDTO request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
@@ -229,6 +233,7 @@ public class AuthService {
      * Verifies that the user has an ACTIVE membership with the requested distributor
      * and an official distributor email.
      */
+    @Transactional(readOnly = true)
     public DistributorSelectionResponseDTO selectDistributor(DistributorSelectionRequestDTO request) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {

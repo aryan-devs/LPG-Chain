@@ -50,7 +50,10 @@ class OpenApiDocumentationIntegrationTest {
                 .andExpect(jsonPath("$.paths['/api/health']").exists())
                 .andExpect(jsonPath("$.paths['/api/users']").exists())
                 .andExpect(jsonPath("$.paths['/api/distributors']").exists())
-                .andExpect(jsonPath("$.paths['/api/memberships']").exists());
+                .andExpect(jsonPath("$.paths['/api/memberships']").exists())
+                .andExpect(jsonPath("$.paths['/api/deliveries']").exists())
+                .andExpect(jsonPath("$.paths['/api/drivers']").exists())
+                .andExpect(jsonPath("$.paths['/api/vehicles']").exists());
     }
 
     @Test

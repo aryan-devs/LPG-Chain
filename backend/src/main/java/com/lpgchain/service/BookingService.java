@@ -13,6 +13,7 @@ import com.lpgchain.repository.DistributorRepository;
 import com.lpgchain.repository.UserRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 
 @Service
+@Transactional(readOnly = true)
 public class BookingService {
 
     public static final Set<String> VALID_STATUSES = Set.of(
@@ -106,6 +108,7 @@ public class BookingService {
      * Creates a new booking from a validated BookingRequestDTO.
      * Enforces that customers create bookings only for their authenticated user ID.
      */
+    @Transactional
     public StatusUpdateResult createBookingFromDTO(BookingRequestDTO dto) {
         bookingAuthorizationService.checkCanCreateBooking(dto);
 
@@ -137,6 +140,7 @@ public class BookingService {
      * Creates a new booking directly from a Booking entity.
      * Always sets status to PENDING and bookingDate to now() if not provided.
      */
+    @Transactional
     public Booking createBooking(Booking booking) {
         booking.setStatus("PENDING");
         if (booking.getBookingDate() == null) {
@@ -145,6 +149,7 @@ public class BookingService {
         return bookingRepository.save(booking);
     }
 
+    @Transactional
     public void deleteBooking(Long id) {
         bookingAuthorizationService.checkCanDeleteBooking();
         bookingRepository.deleteById(id);
@@ -169,6 +174,7 @@ public class BookingService {
      * Restricted to administrators.
      * The booking must be in PENDING status.
      */
+    @Transactional
     public StatusUpdateResult assignDistributor(Long bookingId, Long distributorId) {
         bookingAuthorizationService.checkCanAssignDistributor();
 
@@ -199,6 +205,7 @@ public class BookingService {
      * Updates the status of a booking.
      * Enforces ReBAC (ownership / assignment) and ABAC (action validity & state machine transitions).
      */
+    @Transactional
     public StatusUpdateResult updateBookingStatus(Long id, String newStatus) {
         Optional<Booking> optional = bookingRepository.findById(id);
         if (optional.isEmpty()) {
