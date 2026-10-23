@@ -18,7 +18,12 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins("http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000") // Vite dev server
+                .allowedOrigins(
+                    "https://lpg-chain.vercel.app",
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    "http://localhost:3000"
+                )
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD")
                 .allowedHeaders("*")
                 .exposedHeaders("Authorization", "Content-Type")
