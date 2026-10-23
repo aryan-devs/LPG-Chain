@@ -42,4 +42,6 @@ public interface DeliveryAuthorizationService {
     void checkCanAccessVehicleTracking(Vehicle vehicle);
 
     void checkCanIngestVehicleLocation(Vehicle vehicle);
+
+    void checkCanPerformDriverHandover(Delivery delivery);
 }

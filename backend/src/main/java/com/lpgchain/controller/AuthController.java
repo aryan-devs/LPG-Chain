@@ -22,18 +22,46 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.lpgchain.dto.UserRequestDTO;
+import com.lpgchain.dto.UserResponseDTO;
+import com.lpgchain.service.UserService;
+import org.springframework.http.HttpStatus;
+
 /**
- * AuthController — Handles authentication and role/distributor selection endpoints.
+ * AuthController — Handles authentication, registration, and role/distributor selection endpoints.
  */
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "Authentication", description = "User authentication, active-role selection, and distributor context management")
+@Tag(name = "Authentication", description = "User authentication, customer registration, active-role selection, and distributor context management")
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
+    private final com.lpgchain.service.GoogleAuthService googleAuthService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, UserService userService, com.lpgchain.service.GoogleAuthService googleAuthService) {
         this.authService = authService;
+        this.userService = userService;
+        this.googleAuthService = googleAuthService;
+    }
+
+    /**
+     * Registers a new customer account. Rejects attempts to self-assign privileged roles (ADMIN, DISTRIBUTOR).
+     */
+    @PostMapping("/register")
+    @Operation(summary = "Customer Registration",
+            description = "Public customer registration endpoint. Provisions a verified CUSTOMER account with BCrypt+Pepper password hashing. Privileged roles are strictly forbidden.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Customer registered successfully",
+                    content = @Content(schema = @Schema(implementation = UserResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Validation failed or duplicate email",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Attempt to self-assign privileged role",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<UserResponseDTO> register(@Valid @RequestBody UserRequestDTO request) {
+        UserResponseDTO response = userService.createUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
@@ -96,6 +124,18 @@ public class AuthController {
     public ResponseEntity<DistributorSelectionResponseDTO> selectDistributor(
             @Valid @RequestBody DistributorSelectionRequestDTO request) {
         DistributorSelectionResponseDTO response = authService.selectDistributor(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Authenticates a user with a verified Google OAuth 2.0 / OpenID Connect ID token.
+     */
+    @PostMapping("/google")
+    @Operation(summary = "Google OAuth 2.0 / OpenID Connect Sign-in",
+            description = "Validates Google ID token, verifies user identity, provisions customer account if new, and returns safe JWT session.")
+    public ResponseEntity<LoginResponseDTO> authenticateWithGoogle(
+            @Valid @RequestBody com.lpgchain.dto.GoogleAuthRequestDTO request) {
+        LoginResponseDTO response = googleAuthService.authenticateWithGoogle(request);
         return ResponseEntity.ok(response);
     }
 }

@@ -13,6 +13,7 @@ import com.lpgchain.repository.BookingRepository;
 import com.lpgchain.repository.DeliveryRepository;
 import com.lpgchain.repository.DistributorMembershipRepository;
 import com.lpgchain.repository.DistributorRepository;
+import com.lpgchain.repository.PaymentRepository;
 import com.lpgchain.repository.DriverRepository;
 import com.lpgchain.repository.RoleRepository;
 import com.lpgchain.repository.UserRepository;
@@ -46,6 +47,7 @@ public class DeliveryTransactionIntegrationTest {
     @Autowired private DeliveryService deliveryService;
     @Autowired private DeliveryRepository deliveryRepository;
     @Autowired private BookingRepository bookingRepository;
+    @Autowired(required = false) private PaymentRepository paymentRepository;
     @Autowired private DriverRepository driverRepository;
     @Autowired private VehicleRepository vehicleRepository;
     @Autowired private DistributorRepository distributorRepository;
@@ -104,6 +106,7 @@ public class DeliveryTransactionIntegrationTest {
 
     private void cleanDatabase() {
         deliveryRepository.deleteAll();
+        if (paymentRepository != null) paymentRepository.deleteAll();
         bookingRepository.deleteAll();
         driverRepository.deleteAll();
         vehicleRepository.deleteAll();

@@ -8,8 +8,10 @@ import com.lpgchain.entity.Role;
 import com.lpgchain.entity.User;
 import com.lpgchain.entity.UserRole;
 import com.lpgchain.repository.BookingRepository;
+import com.lpgchain.repository.DeliveryRepository;
 import com.lpgchain.repository.DistributorMembershipRepository;
 import com.lpgchain.repository.DistributorRepository;
+import com.lpgchain.repository.PaymentRepository;
 import com.lpgchain.repository.RoleRepository;
 import com.lpgchain.repository.UserRepository;
 import com.lpgchain.repository.UserRoleRepository;
@@ -49,6 +51,8 @@ public class DatabaseOptimizationAndTransactionIntegrationTest {
 
     @Autowired private BookingService bookingService;
     @Autowired private BookingRepository bookingRepository;
+    @Autowired(required = false) private DeliveryRepository deliveryRepository;
+    @Autowired(required = false) private PaymentRepository paymentRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private RoleRepository roleRepository;
     @Autowired private UserRoleRepository userRoleRepository;
@@ -101,6 +105,8 @@ public class DatabaseOptimizationAndTransactionIntegrationTest {
     }
 
     private void cleanDatabase() {
+        if (deliveryRepository != null) deliveryRepository.deleteAll();
+        if (paymentRepository != null) paymentRepository.deleteAll();
         bookingRepository.deleteAll();
         distributorMembershipRepository.deleteAll();
         userRoleRepository.deleteAll();

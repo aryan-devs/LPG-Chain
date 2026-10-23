@@ -1,0 +1,27 @@
+{
+  "feature_cols": [
+    "day_of_week",
+    "day_of_month",
+    "month",
+    "is_weekend",
+    "quarter",
+    "lag_1",
+    "lag_7",
+    "lag_14",
+    "lag_21",
+    "lag_28",
+    "rolling_mean_7",
+    "rolling_std_7",
+    "rolling_mean_14",
+    "is_cat_DOMESTIC_14_2",
+    "is_cat_DOMESTIC_5_0",
+    "is_cat_COMMERCIAL_19_0"
+  ],
+  "categories": [
+    "DOMESTIC_14_2",
+    "DOMESTIC_5_0",
+    "COMMERCIAL_19_0"
+  ],
+  "last_trained_date": "2026-09-30",
+  "model_file": "demand_forecast_model.pkl"
+}

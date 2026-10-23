@@ -18,7 +18,9 @@ import java.time.LocalDateTime;
         },
         indexes = {
                 @Index(name = "idx_distributor_licence", columnList = "licence_number"),
-                @Index(name = "idx_distributor_status", columnList = "status")
+                @Index(name = "idx_distributor_status", columnList = "status"),
+                @Index(name = "idx_distributor_pin_code", columnList = "pin_code"),
+                @Index(name = "idx_distributor_city", columnList = "city")
         }
 )
 public class Distributor {
@@ -37,6 +39,23 @@ public class Distributor {
     private String passkey;
     private LocalDateTime passkeyExpiry;
     private boolean passkeyUsed;
+
+    @Column(name = "pin_code")
+    private String pinCode;
+
+    private String city;
+
+    private String state;
+
+    private Double latitude;
+
+    private Double longitude;
+
+    @Column(name = "supported_services")
+    private String supportedServices;
+
+    @Column(name = "operating_hours")
+    private String operatingHours;
 
     public Distributor() {
     }
@@ -68,6 +87,22 @@ public class Distributor {
         this.passkeyUsed = passkeyUsed;
     }
 
+    public Distributor(Long id, String agencyName, String licenceNumber, String contactNumber,
+                       String address, String status, String passkey,
+                       LocalDateTime passkeyExpiry, boolean passkeyUsed,
+                       String pinCode, String city, String state,
+                       Double latitude, Double longitude,
+                       String supportedServices, String operatingHours) {
+        this(id, agencyName, licenceNumber, contactNumber, address, status, passkey, passkeyExpiry, passkeyUsed);
+        this.pinCode = pinCode;
+        this.city = city;
+        this.state = state;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.supportedServices = supportedServices;
+        this.operatingHours = operatingHours;
+    }
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -94,4 +129,25 @@ public class Distributor {
 
     public boolean isPasskeyUsed() { return passkeyUsed; }
     public void setPasskeyUsed(boolean passkeyUsed) { this.passkeyUsed = passkeyUsed; }
+
+    public String getPinCode() { return pinCode; }
+    public void setPinCode(String pinCode) { this.pinCode = pinCode; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+
+    public String getSupportedServices() { return supportedServices; }
+    public void setSupportedServices(String supportedServices) { this.supportedServices = supportedServices; }
+
+    public String getOperatingHours() { return operatingHours; }
+    public void setOperatingHours(String operatingHours) { this.operatingHours = operatingHours; }
 }

@@ -1,6 +1,7 @@
 package com.lpgchain.mapper;
 
 import com.lpgchain.dto.BookingResponseDTO;
+import com.lpgchain.dto.DistributorSummaryDTO;
 import com.lpgchain.dto.UserRequestDTO;
 import com.lpgchain.dto.UserResponseDTO;
 import com.lpgchain.entity.Booking;
@@ -72,6 +73,16 @@ public class EntityMapper {
         dto.setBookingDate(booking.getBookingDate());
         dto.setQuantity(booking.getQuantity());
         dto.setStatus(booking.getStatus());
+        dto.setCylinderCategory(booking.getCylinderCategory() != null ? booking.getCylinderCategory() : "DOMESTIC_14_2");
+        dto.setCapacityKg(booking.getCapacityKg() != null ? booking.getCapacityKg() : 14.2);
+        dto.setBookingNumber(booking.getBookingNumber());
+        dto.setUnitPrice(booking.getUnitPrice());
+        dto.setTotalAmount(booking.getTotalAmount());
+        dto.setSubsidyAmount(booking.getSubsidyAmount());
+        dto.setNetAmount(booking.getNetAmount());
+        dto.setPaymentStatus(booking.getPaymentStatus());
+        dto.setPaymentMethod(booking.getPaymentMethod());
+        dto.setPaymentReference(booking.getPaymentReference());
         return dto;
     }
 
@@ -169,6 +180,10 @@ public class EntityMapper {
         dto.setPickedUpAt(delivery.getPickedUpAt());
         dto.setOutForDeliveryAt(delivery.getOutForDeliveryAt());
         dto.setDeliveredAt(delivery.getDeliveredAt());
+        dto.setHandoverInitiated(delivery.getOtpGeneratedAt() != null);
+        dto.setHandoverInitiatedAt(delivery.getOtpGeneratedAt());
+        dto.setOtpExpiresAt(delivery.getOtpExpiresAt());
+        dto.setOtpVerifiedAt(delivery.getOtpVerifiedAt());
         return dto;
     }
 
@@ -190,6 +205,125 @@ public class EntityMapper {
         dto.setSpeed(location.getSpeed());
         dto.setHeading(location.getHeading());
         dto.setRecordedAt(location.getRecordedAt());
+        return dto;
+    }
+
+    /**
+     * Maps a Distributor entity to DistributorSummaryDTO, strictly excluding sensitive internal credentials.
+     */
+    public DistributorSummaryDTO toDistributorSummaryDTO(Distributor distributor) {
+        if (distributor == null) {
+            return null;
+        }
+
+        DistributorSummaryDTO dto = new DistributorSummaryDTO();
+        dto.setId(distributor.getId());
+        dto.setAgencyName(distributor.getAgencyName());
+        dto.setContactNumber(distributor.getContactNumber());
+        dto.setAddress(distributor.getAddress());
+        dto.setPinCode(distributor.getPinCode());
+        dto.setCity(distributor.getCity());
+        dto.setState(distributor.getState());
+        dto.setLatitude(distributor.getLatitude());
+        dto.setLongitude(distributor.getLongitude());
+        dto.setSupportedServices(distributor.getSupportedServices());
+        dto.setOperatingHours(distributor.getOperatingHours());
+        dto.setStatus(distributor.getStatus());
+        dto.setNetworkType("LPG_CHAIN_PARTNER");
+        return dto;
+    }
+
+    public com.lpgchain.dto.SavedAddressDTO toSavedAddressDTO(com.lpgchain.entity.SavedAddress address) {
+        if (address == null) return null;
+        com.lpgchain.dto.SavedAddressDTO dto = new com.lpgchain.dto.SavedAddressDTO();
+        dto.setId(address.getId());
+        dto.setAddressLine1(address.getAddressLine1());
+        dto.setAddressLine2(address.getAddressLine2());
+        dto.setLandmark(address.getLandmark());
+        dto.setCity(address.getCity());
+        dto.setState(address.getState());
+        dto.setPincode(address.getPincode());
+        dto.setAddressType(address.getAddressType());
+        dto.setIsDefault(address.getIsDefault());
+        return dto;
+    }
+
+    public com.lpgchain.dto.PaymentResponseDTO toPaymentResponseDTO(com.lpgchain.entity.Payment payment) {
+        if (payment == null) return null;
+        com.lpgchain.dto.PaymentResponseDTO dto = new com.lpgchain.dto.PaymentResponseDTO();
+        dto.setId(payment.getId());
+        if (payment.getBooking() != null) {
+            dto.setBookingId(payment.getBooking().getId());
+            dto.setBookingNumber(payment.getBooking().getBookingNumber());
+        }
+        if (payment.getCustomer() != null) {
+            dto.setCustomerId(payment.getCustomer().getId());
+            dto.setCustomerName(payment.getCustomer().getName());
+        }
+        dto.setAmount(payment.getAmount());
+        dto.setSubsidyAmount(payment.getSubsidyAmount());
+        dto.setNetAmount(payment.getNetAmount());
+        dto.setPaymentMethod(payment.getPaymentMethod());
+        dto.setPaymentStatus(payment.getPaymentStatus());
+        dto.setTransactionReference(payment.getTransactionReference());
+        dto.setIsSimulated(payment.getIsSimulated());
+        dto.setPaidAt(payment.getPaidAt());
+        dto.setCreatedAt(payment.getCreatedAt());
+        return dto;
+    }
+
+    public com.lpgchain.dto.ComplaintResponseDTO toComplaintResponseDTO(com.lpgchain.entity.Complaint complaint) {
+        if (complaint == null) return null;
+        com.lpgchain.dto.ComplaintResponseDTO dto = new com.lpgchain.dto.ComplaintResponseDTO();
+        dto.setId(complaint.getId());
+        dto.setComplaintNumber(complaint.getComplaintNumber());
+        if (complaint.getCustomer() != null) {
+            dto.setCustomerId(complaint.getCustomer().getId());
+            dto.setCustomerName(complaint.getCustomer().getName());
+        }
+        if (complaint.getBooking() != null) {
+            dto.setBookingId(complaint.getBooking().getId());
+            dto.setBookingNumber(complaint.getBooking().getBookingNumber());
+        }
+        if (complaint.getDistributor() != null) {
+            dto.setDistributorId(complaint.getDistributor().getId());
+            dto.setDistributorName(complaint.getDistributor().getAgencyName());
+        }
+        dto.setCategory(complaint.getCategory());
+        dto.setSubject(complaint.getSubject());
+        dto.setDescription(complaint.getDescription());
+        dto.setPriority(complaint.getPriority());
+        dto.setStatus(complaint.getStatus());
+        dto.setResolutionNote(complaint.getResolutionNote());
+        if (complaint.getResolvedBy() != null) {
+            dto.setResolvedByName(complaint.getResolvedBy().getName());
+        }
+        dto.setCreatedAt(complaint.getCreatedAt());
+        dto.setUpdatedAt(complaint.getUpdatedAt());
+        dto.setResolvedAt(complaint.getResolvedAt());
+        return dto;
+    }
+
+    public com.lpgchain.dto.CustomerDocumentDTO toCustomerDocumentDTO(com.lpgchain.entity.CustomerDocument doc) {
+        if (doc == null) return null;
+        com.lpgchain.dto.CustomerDocumentDTO dto = new com.lpgchain.dto.CustomerDocumentDTO();
+        dto.setId(doc.getId());
+        if (doc.getCustomer() != null) {
+            dto.setCustomerId(doc.getCustomer().getId());
+            dto.setCustomerName(doc.getCustomer().getName());
+        }
+        dto.setDocumentType(doc.getDocumentType());
+        dto.setDocumentNumber(doc.getDocumentNumber());
+        dto.setFileName(doc.getFileName());
+        dto.setContentType(doc.getContentType());
+        dto.setFileSizeBytes(doc.getFileSizeBytes());
+        dto.setStatus(doc.getStatus());
+        dto.setRejectionReason(doc.getRejectionReason());
+        if (doc.getReviewedBy() != null) {
+            dto.setReviewedByName(doc.getReviewedBy().getName());
+        }
+        dto.setCreatedAt(doc.getCreatedAt());
+        dto.setReviewedAt(doc.getReviewedAt());
         return dto;
     }
 }

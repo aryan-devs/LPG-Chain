@@ -44,19 +44,28 @@ public class BookingService {
     private final EntityMapper entityMapper;
     private final BookingAuthorizationService bookingAuthorizationService;
     private final DistributorMembershipRepository distributorMembershipRepository;
+    private final com.lpgchain.repository.PaymentRepository paymentRepository;
+    private final com.lpgchain.repository.SavedAddressRepository savedAddressRepository;
+    private final RealtimeEventPublisher realtimeEventPublisher;
 
     public BookingService(BookingRepository bookingRepository,
                           DistributorRepository distributorRepository,
                           UserRepository userRepository,
                           EntityMapper entityMapper,
                           BookingAuthorizationService bookingAuthorizationService,
-                          DistributorMembershipRepository distributorMembershipRepository) {
+                          DistributorMembershipRepository distributorMembershipRepository,
+                          com.lpgchain.repository.PaymentRepository paymentRepository,
+                          com.lpgchain.repository.SavedAddressRepository savedAddressRepository,
+                          RealtimeEventPublisher realtimeEventPublisher) {
         this.bookingRepository = bookingRepository;
         this.distributorRepository = distributorRepository;
         this.userRepository = userRepository;
         this.entityMapper = entityMapper;
         this.bookingAuthorizationService = bookingAuthorizationService;
         this.distributorMembershipRepository = distributorMembershipRepository;
+        this.paymentRepository = paymentRepository;
+        this.savedAddressRepository = savedAddressRepository;
+        this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
     public List<BookingResponseDTO> getAllBookings() {
@@ -117,12 +126,61 @@ public class BookingService {
             return StatusUpdateResult.notFound();
         }
 
+        String deliveryAddress = dto.getDeliveryAddress();
+        if (dto.getSavedAddressId() != null) {
+            Optional<com.lpgchain.entity.SavedAddress> addrOpt = savedAddressRepository.findByIdAndUserId(dto.getSavedAddressId(), customerOpt.get().getId());
+            if (addrOpt.isPresent()) {
+                com.lpgchain.entity.SavedAddress a = addrOpt.get();
+                deliveryAddress = a.getAddressLine1() +
+                        (a.getAddressLine2() != null ? ", " + a.getAddressLine2() : "") +
+                        (a.getLandmark() != null ? ", Near " + a.getLandmark() : "") +
+                        ", " + a.getCity() + ", " + a.getState() + " - " + a.getPincode();
+            }
+        }
+
         Booking booking = new Booking();
         booking.setCustomer(customerOpt.get());
-        booking.setDeliveryAddress(dto.getDeliveryAddress());
+        booking.setDeliveryAddress(deliveryAddress);
         booking.setQuantity(dto.getQuantity());
         booking.setStatus("PENDING");
         booking.setBookingDate(dto.getBookingDate() != null ? dto.getBookingDate() : LocalDateTime.now());
+
+        com.lpgchain.entity.CylinderCategory cat = dto.getCylinderCategory() != null
+                ? com.lpgchain.entity.CylinderCategory.fromCode(dto.getCylinderCategory())
+                : com.lpgchain.entity.CylinderCategory.DOMESTIC_14_2;
+        booking.setCylinderCategory(cat.getCode());
+        booking.setCapacityKg(dto.getCapacityKg() != null ? dto.getCapacityKg() : cat.getCapacityKg());
+
+        // Trusted server-side price calculation
+        double unitPrice;
+        double subsidyPerUnit = 0.0;
+        if (cat == com.lpgchain.entity.CylinderCategory.COMMERCIAL_19_0) {
+            unitPrice = 1785.0;
+        } else if (cat == com.lpgchain.entity.CylinderCategory.DOMESTIC_5_0) {
+            unitPrice = 360.0;
+        } else {
+            unitPrice = 853.0;
+            subsidyPerUnit = 200.0;
+        }
+
+        double totalAmount = unitPrice * dto.getQuantity();
+        double subsidyAmount = subsidyPerUnit * dto.getQuantity();
+        double netAmount = totalAmount - subsidyAmount;
+
+        booking.setUnitPrice(unitPrice);
+        booking.setTotalAmount(totalAmount);
+        booking.setSubsidyAmount(subsidyAmount);
+        booking.setNetAmount(netAmount);
+        booking.setBookingNumber("BK-" + System.currentTimeMillis() + "-" + (int)(1000 + Math.random() * 9000));
+
+        String pMethod = (dto.getPaymentMethod() != null && "CASH_ON_DELIVERY".equalsIgnoreCase(dto.getPaymentMethod().trim()))
+                ? "CASH_ON_DELIVERY"
+                : "DEMO_QR";
+        booking.setPaymentMethod(pMethod);
+        booking.setPaymentStatus("PENDING");
+
+        String txnRef = "TXN-DEMO-" + java.util.UUID.randomUUID().toString().substring(0, 10).toUpperCase();
+        booking.setPaymentReference(txnRef);
 
         if (dto.getDistributorId() != null) {
             Optional<Distributor> distributorOpt = distributorRepository.findById(dto.getDistributorId());
@@ -133,7 +191,30 @@ public class BookingService {
         }
 
         Booking savedBooking = bookingRepository.save(booking);
-        return StatusUpdateResult.success(entityMapper.toBookingResponseDTO(savedBooking));
+
+        // Persist initial payment record in MySQL
+        com.lpgchain.entity.Payment payment = new com.lpgchain.entity.Payment();
+        payment.setBooking(savedBooking);
+        payment.setCustomer(savedBooking.getCustomer());
+        payment.setAmount(totalAmount);
+        payment.setSubsidyAmount(subsidyAmount);
+        payment.setNetAmount(netAmount);
+        payment.setPaymentMethod(pMethod);
+        payment.setPaymentStatus("PENDING");
+        payment.setTransactionReference(txnRef);
+        payment.setIsSimulated("DEMO_QR".equals(pMethod));
+        paymentRepository.save(payment);
+
+        BookingResponseDTO resDTO = entityMapper.toBookingResponseDTO(savedBooking);
+
+        // Real-time notification publishing
+        realtimeEventPublisher.publishCustomerEvent(customerOpt.get().getId(), "BOOKING_CREATED", resDTO);
+        if (savedBooking.getDistributor() != null) {
+            realtimeEventPublisher.publishDistributorEvent(savedBooking.getDistributor().getId(), "BOOKING_CREATED", resDTO);
+        }
+        realtimeEventPublisher.publishAdminEvent("BOOKING_CREATED", resDTO);
+
+        return StatusUpdateResult.success(resDTO);
     }
 
     /**
@@ -207,7 +288,19 @@ public class BookingService {
      */
     @Transactional
     public StatusUpdateResult updateBookingStatus(Long id, String newStatus) {
-        Optional<Booking> optional = bookingRepository.findById(id);
+        return updateBookingStatus(id, newStatus, null);
+    }
+
+    /**
+     * Updates the status of a booking with optional operational/rejection reason.
+     * Uses pessimistic write locking to prevent concurrent race conditions.
+     */
+    @Transactional
+    public StatusUpdateResult updateBookingStatus(Long id, String newStatus, String reason) {
+        Optional<Booking> optional = bookingRepository.findByIdWithLock(id);
+        if (optional.isEmpty()) {
+            optional = bookingRepository.findById(id);
+        }
         if (optional.isEmpty()) {
             return StatusUpdateResult.notFound();
         }
@@ -227,13 +320,26 @@ public class BookingService {
         Set<String> allowed = ALLOWED_TRANSITIONS.getOrDefault(currentStatus, Set.of());
 
         if (!allowed.contains(newStatus)) {
+            if (currentStatus != null && currentStatus.equalsIgnoreCase(newStatus)) {
+                return StatusUpdateResult.invalid("Booking #" + id + " is already in " + currentStatus + " status.");
+            }
             return StatusUpdateResult.invalid("Transition from " + currentStatus +
                     " to " + newStatus + " is not allowed.");
         }
 
         booking.setStatus(newStatus);
         Booking savedBooking = bookingRepository.save(booking);
-        return StatusUpdateResult.success(entityMapper.toBookingResponseDTO(savedBooking));
+
+        BookingResponseDTO resDTO = entityMapper.toBookingResponseDTO(savedBooking);
+        if (savedBooking.getCustomer() != null) {
+            realtimeEventPublisher.publishCustomerEvent(savedBooking.getCustomer().getId(), "BOOKING_STATUS_CHANGED", resDTO);
+        }
+        if (savedBooking.getDistributor() != null) {
+            realtimeEventPublisher.publishDistributorEvent(savedBooking.getDistributor().getId(), "BOOKING_STATUS_CHANGED", resDTO);
+        }
+        realtimeEventPublisher.publishAdminEvent("BOOKING_STATUS_CHANGED", resDTO);
+
+        return StatusUpdateResult.success(resDTO);
     }
 
 

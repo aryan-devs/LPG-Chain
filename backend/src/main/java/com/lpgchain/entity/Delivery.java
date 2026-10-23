@@ -53,6 +53,21 @@ public class Delivery {
     private LocalDateTime outForDeliveryAt;
     private LocalDateTime deliveredAt;
 
+    @Column(name = "otp_hash", length = 100)
+    private String otpHash;
+
+    private LocalDateTime otpExpiresAt;
+
+    @Column(name = "otp_attempts")
+    private Integer otpAttempts = 0;
+
+    @Column(name = "otp_max_attempts")
+    private Integer otpMaxAttempts = 3;
+
+    private LocalDateTime otpGeneratedAt;
+
+    private LocalDateTime otpVerifiedAt;
+
     public Delivery() {
     }
 
@@ -158,5 +173,53 @@ public class Delivery {
 
     public void setDeliveredAt(LocalDateTime deliveredAt) {
         this.deliveredAt = deliveredAt;
+    }
+
+    public String getOtpHash() {
+        return otpHash;
+    }
+
+    public void setOtpHash(String otpHash) {
+        this.otpHash = otpHash;
+    }
+
+    public LocalDateTime getOtpExpiresAt() {
+        return otpExpiresAt;
+    }
+
+    public void setOtpExpiresAt(LocalDateTime otpExpiresAt) {
+        this.otpExpiresAt = otpExpiresAt;
+    }
+
+    public Integer getOtpAttempts() {
+        return otpAttempts;
+    }
+
+    public void setOtpAttempts(Integer otpAttempts) {
+        this.otpAttempts = otpAttempts;
+    }
+
+    public Integer getOtpMaxAttempts() {
+        return otpMaxAttempts;
+    }
+
+    public void setOtpMaxAttempts(Integer otpMaxAttempts) {
+        this.otpMaxAttempts = otpMaxAttempts;
+    }
+
+    public LocalDateTime getOtpGeneratedAt() {
+        return otpGeneratedAt;
+    }
+
+    public void setOtpGeneratedAt(LocalDateTime otpGeneratedAt) {
+        this.otpGeneratedAt = otpGeneratedAt;
+    }
+
+    public LocalDateTime getOtpVerifiedAt() {
+        return otpVerifiedAt;
+    }
+
+    public void setOtpVerifiedAt(LocalDateTime otpVerifiedAt) {
+        this.otpVerifiedAt = otpVerifiedAt;
     }
 }

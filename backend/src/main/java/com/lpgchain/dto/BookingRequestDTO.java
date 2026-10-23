@@ -29,6 +29,18 @@ public class BookingRequestDTO {
     @Schema(description = "Number of LPG cylinders requested", example = "2", minimum = "1", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer quantity;
 
+    @Schema(description = "Cylinder category (DOMESTIC_14_2, DOMESTIC_5_0, COMMERCIAL_19_0)", example = "DOMESTIC_14_2")
+    private String cylinderCategory;
+
+    @Schema(description = "Nominal cylinder capacity in kg", example = "14.2")
+    private Double capacityKg;
+
+    @Schema(description = "Payment method: DEMO_QR or CASH_ON_DELIVERY", example = "DEMO_QR")
+    private String paymentMethod;
+
+    @Schema(description = "Optional saved address ID to link delivery address", example = "1")
+    private Long savedAddressId;
+
     public BookingRequestDTO() {
     }
 
@@ -46,4 +58,16 @@ public class BookingRequestDTO {
 
     public Integer getQuantity() { return quantity; }
     public void setQuantity(Integer quantity) { this.quantity = quantity; }
+
+    public String getCylinderCategory() { return cylinderCategory; }
+    public void setCylinderCategory(String cylinderCategory) { this.cylinderCategory = cylinderCategory; }
+
+    public Double getCapacityKg() { return capacityKg; }
+    public void setCapacityKg(Double capacityKg) { this.capacityKg = capacityKg; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public Long getSavedAddressId() { return savedAddressId; }
+    public void setSavedAddressId(Long savedAddressId) { this.savedAddressId = savedAddressId; }
 }

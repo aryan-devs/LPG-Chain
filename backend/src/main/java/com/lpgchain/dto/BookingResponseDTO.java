@@ -42,6 +42,36 @@ public class BookingResponseDTO {
     @Schema(description = "Booking status lifecycle state (PENDING, CONFIRMED, DELIVERED, CANCELLED)", example = "PENDING")
     private String status;
 
+    @Schema(description = "Cylinder category code", example = "DOMESTIC_14_2")
+    private String cylinderCategory;
+
+    @Schema(description = "Nominal cylinder capacity in kg", example = "14.2")
+    private Double capacityKg;
+
+    @Schema(description = "Unique booking tracking number", example = "BK-20261018-ABCD")
+    private String bookingNumber;
+
+    @Schema(description = "Server-calculated unit price in INR", example = "853.0")
+    private Double unitPrice;
+
+    @Schema(description = "Total price before subsidy", example = "853.0")
+    private Double totalAmount;
+
+    @Schema(description = "Direct Benefit Transfer subsidy in INR", example = "200.0")
+    private Double subsidyAmount;
+
+    @Schema(description = "Final payable amount", example = "653.0")
+    private Double netAmount;
+
+    @Schema(description = "Payment status (PENDING, PAID, FAILED, CANCELLED)", example = "PENDING")
+    private String paymentStatus;
+
+    @Schema(description = "Payment method (DEMO_QR, CASH_ON_DELIVERY)", example = "DEMO_QR")
+    private String paymentMethod;
+
+    @Schema(description = "Payment or transaction reference", example = "TXN-DEMO-123456")
+    private String paymentReference;
+
     public BookingResponseDTO() {
     }
 
@@ -58,6 +88,26 @@ public class BookingResponseDTO {
         this.bookingDate = bookingDate;
         this.quantity = quantity;
         this.status = status;
+        this.cylinderCategory = "DOMESTIC_14_2";
+        this.capacityKg = 14.2;
+    }
+
+    public BookingResponseDTO(Long id, Long customerId, String customerName,
+                              Long distributorId, String distributorName,
+                              String deliveryAddress, LocalDateTime bookingDate,
+                              Integer quantity, String status,
+                              String cylinderCategory, Double capacityKg) {
+        this.id = id;
+        this.customerId = customerId;
+        this.customerName = customerName;
+        this.distributorId = distributorId;
+        this.distributorName = distributorName;
+        this.deliveryAddress = deliveryAddress;
+        this.bookingDate = bookingDate;
+        this.quantity = quantity;
+        this.status = status;
+        this.cylinderCategory = cylinderCategory;
+        this.capacityKg = capacityKg;
     }
 
     public Long getId() { return id; }
@@ -86,4 +136,34 @@ public class BookingResponseDTO {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getCylinderCategory() { return cylinderCategory; }
+    public void setCylinderCategory(String cylinderCategory) { this.cylinderCategory = cylinderCategory; }
+
+    public Double getCapacityKg() { return capacityKg; }
+    public void setCapacityKg(Double capacityKg) { this.capacityKg = capacityKg; }
+
+    public String getBookingNumber() { return bookingNumber; }
+    public void setBookingNumber(String bookingNumber) { this.bookingNumber = bookingNumber; }
+
+    public Double getUnitPrice() { return unitPrice; }
+    public void setUnitPrice(Double unitPrice) { this.unitPrice = unitPrice; }
+
+    public Double getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }
+
+    public Double getSubsidyAmount() { return subsidyAmount; }
+    public void setSubsidyAmount(Double subsidyAmount) { this.subsidyAmount = subsidyAmount; }
+
+    public Double getNetAmount() { return netAmount; }
+    public void setNetAmount(Double netAmount) { this.netAmount = netAmount; }
+
+    public String getPaymentStatus() { return paymentStatus; }
+    public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
+
+    public String getPaymentReference() { return paymentReference; }
+    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
 }

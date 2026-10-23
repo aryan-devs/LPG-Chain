@@ -149,15 +149,18 @@ public class BookingController {
             @RequestBody Map<String, String> body) {
         String newStatus = body.get("status");
         if (newStatus == null || newStatus.isBlank()) {
-            return ResponseEntity.badRequest().body("Field 'status' is required.");
+            return ResponseEntity.badRequest().body(new ErrorResponse(400, "Field 'status' is required.", null));
         }
 
-        StatusUpdateResult result = bookingService.updateBookingStatus(id, newStatus.toUpperCase());
+        String reason = body.get("reason");
+        StatusUpdateResult result = bookingService.updateBookingStatus(id, newStatus.toUpperCase(), reason);
 
         return switch (result.getType()) {
             case SUCCESS   -> ResponseEntity.ok(result.getBooking());
-            case NOT_FOUND -> ResponseEntity.notFound().build();
-            case INVALID   -> ResponseEntity.badRequest().body(result.getErrorMessage());
+            case NOT_FOUND -> ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse(404, "Booking not found with id: " + id, null));
+            case INVALID   -> ResponseEntity.badRequest()
+                    .body(new ErrorResponse(400, result.getErrorMessage(), null));
         };
     }
 

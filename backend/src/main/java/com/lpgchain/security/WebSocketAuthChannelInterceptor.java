@@ -52,23 +52,29 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private static final Pattern DELIVERY_TRACKING_PATTERN = Pattern.compile("^/topic/deliveries/(\\d+)/tracking$");
+    private static final Pattern CUSTOMER_TOPIC_PATTERN = Pattern.compile("^/topic/customers/(\\d+)(/.*)?$");
+    private static final Pattern DISTRIBUTOR_TOPIC_PATTERN = Pattern.compile("^/topic/distributors/(\\d+)(/.*)?$");
+    private static final Pattern ADMIN_TOPIC_PATTERN = Pattern.compile("^/topic/admin(/.*)?$");
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
     private final DeliveryRepository deliveryRepository;
     private final DeliveryAuthorizationService deliveryAuthorizationService;
+    private final com.lpgchain.repository.DistributorMembershipRepository distributorMembershipRepository;
 
     public WebSocketAuthChannelInterceptor(JwtTokenProvider jwtTokenProvider,
                                            UserRepository userRepository,
                                            UserRoleRepository userRoleRepository,
                                            DeliveryRepository deliveryRepository,
-                                           DeliveryAuthorizationService deliveryAuthorizationService) {
+                                           DeliveryAuthorizationService deliveryAuthorizationService,
+                                           com.lpgchain.repository.DistributorMembershipRepository distributorMembershipRepository) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userRepository = userRepository;
         this.userRoleRepository = userRoleRepository;
         this.deliveryRepository = deliveryRepository;
         this.deliveryAuthorizationService = deliveryAuthorizationService;
+        this.distributorMembershipRepository = distributorMembershipRepository;
     }
 
     @Override
@@ -183,35 +189,71 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
             throw new IllegalArgumentException("Subscription destination cannot be empty");
         }
 
-        Matcher matcher = DELIVERY_TRACKING_PATTERN.matcher(destination);
-        if (!matcher.matches()) {
-            log.warn("Subscription rejected: Attempt to subscribe to unauthorized arbitrary destination: {}", destination);
-            throw new AccessDeniedException("Forbidden: Unauthorized subscription destination: " + destination);
-        }
-
         Principal principal = accessor.getUser();
         if (!(principal instanceof Authentication auth) || !auth.isAuthenticated()) {
             log.warn("Subscription rejected: Unauthenticated user attempting to subscribe to {}", destination);
             throw new AccessDeniedException("Unauthorized: Authentication required to subscribe");
         }
 
-        Long deliveryId;
-        try {
-            deliveryId = Long.parseLong(matcher.group(1));
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Invalid delivery ID in destination: " + destination);
+        User user = userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new AccessDeniedException("Unauthorized: User not found"));
+
+        boolean isAdmin = auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()) || "ADMIN".equals(a.getAuthority()));
+
+        // 1. Delivery tracking
+        Matcher deliveryMatcher = DELIVERY_TRACKING_PATTERN.matcher(destination);
+        if (deliveryMatcher.matches()) {
+            Long deliveryId = Long.parseLong(deliveryMatcher.group(1));
+            Delivery delivery = deliveryRepository.findByIdWithDetails(deliveryId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Delivery not found with ID: " + deliveryId));
+            SecurityContextHolder.getContext().setAuthentication(auth);
+            try {
+                deliveryAuthorizationService.checkCanAccessDelivery(delivery);
+                log.info("Subscription approved: user={} subscribed to delivery #{}", auth.getName(), deliveryId);
+                return;
+            } finally {
+                SecurityContextHolder.clearContext();
+            }
         }
 
-        Delivery delivery = deliveryRepository.findByIdWithDetails(deliveryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Delivery not found with ID: " + deliveryId));
-
-        SecurityContextHolder.getContext().setAuthentication(auth);
-        try {
-            deliveryAuthorizationService.checkCanAccessDelivery(delivery);
-            log.info("Subscription approved: user={} subscribed to delivery #{}", auth.getName(), deliveryId);
-        } finally {
-            SecurityContextHolder.clearContext();
+        // 2. Customer personal topics: /topic/customers/{customerId}/**
+        Matcher customerMatcher = CUSTOMER_TOPIC_PATTERN.matcher(destination);
+        if (customerMatcher.matches()) {
+            Long targetCustomerId = Long.parseLong(customerMatcher.group(1));
+            if (isAdmin || user.getId().equals(targetCustomerId)) {
+                log.info("Subscription approved: user={} subscribed to customer topic {}", auth.getName(), destination);
+                return;
+            }
+            log.warn("Subscription rejected: user={} attempted to subscribe to private customer topic {}", auth.getName(), destination);
+            throw new AccessDeniedException("Forbidden: Customers can only subscribe to their own private topics");
         }
+
+        // 3. Distributor agency topics: /topic/distributors/{distributorId}/**
+        Matcher distributorMatcher = DISTRIBUTOR_TOPIC_PATTERN.matcher(destination);
+        if (distributorMatcher.matches()) {
+            Long targetDistributorId = Long.parseLong(distributorMatcher.group(1));
+            if (isAdmin || distributorMembershipRepository.existsByUserIdAndDistributorIdAndStatusIgnoreCase(user.getId(), targetDistributorId, "ACTIVE")) {
+                log.info("Subscription approved: user={} subscribed to distributor topic {}", auth.getName(), destination);
+                return;
+            }
+            log.warn("Subscription rejected: user={} attempted to subscribe to distributor topic {}", auth.getName(), destination);
+            throw new AccessDeniedException("Forbidden: Authorized distributor membership required");
+        }
+
+        // 4. Admin platform topics: /topic/admin/**
+        Matcher adminMatcher = ADMIN_TOPIC_PATTERN.matcher(destination);
+        if (adminMatcher.matches()) {
+            if (isAdmin) {
+                log.info("Subscription approved: admin user={} subscribed to {}", auth.getName(), destination);
+                return;
+            }
+            log.warn("Subscription rejected: non-admin user={} attempted to subscribe to admin topic {}", auth.getName(), destination);
+            throw new AccessDeniedException("Forbidden: Administrator access required");
+        }
+
+        log.warn("Subscription rejected: Attempt to subscribe to unauthorized arbitrary destination: {}", destination);
+        throw new AccessDeniedException("Forbidden: Unauthorized subscription destination: " + destination);
     }
 
     /**

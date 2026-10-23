@@ -52,6 +52,18 @@ public class DeliveryResponseDTO {
     @Schema(description = "Timestamp when cylinder was handed over to customer")
     private LocalDateTime deliveredAt;
 
+    @Schema(description = "Whether delivery doorstep handover has been initiated by driver", example = "true")
+    private Boolean handoverInitiated;
+
+    @Schema(description = "Timestamp when handover OTP was initiated")
+    private LocalDateTime handoverInitiatedAt;
+
+    @Schema(description = "Timestamp when active OTP expires")
+    private LocalDateTime otpExpiresAt;
+
+    @Schema(description = "Timestamp when delivery handover OTP was successfully verified")
+    private LocalDateTime otpVerifiedAt;
+
     public DeliveryResponseDTO() {
     }
 
@@ -141,6 +153,16 @@ public class DeliveryResponseDTO {
         this.vehicleNumber = vehicleNumber;
     }
 
+    public String getVehicleRegistration() {
+        return vehicleNumber;
+    }
+
+    public void setVehicleRegistration(String vehicleRegistration) {
+        if (this.vehicleNumber == null || this.vehicleNumber.isBlank()) {
+            this.vehicleNumber = vehicleRegistration;
+        }
+    }
+
     public Long getDistributorId() {
         return distributorId;
     }
@@ -195,5 +217,37 @@ public class DeliveryResponseDTO {
 
     public void setDeliveredAt(LocalDateTime deliveredAt) {
         this.deliveredAt = deliveredAt;
+    }
+
+    public Boolean getHandoverInitiated() {
+        return handoverInitiated;
+    }
+
+    public void setHandoverInitiated(Boolean handoverInitiated) {
+        this.handoverInitiated = handoverInitiated;
+    }
+
+    public LocalDateTime getHandoverInitiatedAt() {
+        return handoverInitiatedAt;
+    }
+
+    public void setHandoverInitiatedAt(LocalDateTime handoverInitiatedAt) {
+        this.handoverInitiatedAt = handoverInitiatedAt;
+    }
+
+    public LocalDateTime getOtpExpiresAt() {
+        return otpExpiresAt;
+    }
+
+    public void setOtpExpiresAt(LocalDateTime otpExpiresAt) {
+        this.otpExpiresAt = otpExpiresAt;
+    }
+
+    public LocalDateTime getOtpVerifiedAt() {
+        return otpVerifiedAt;
+    }
+
+    public void setOtpVerifiedAt(LocalDateTime otpVerifiedAt) {
+        this.otpVerifiedAt = otpVerifiedAt;
     }
 }

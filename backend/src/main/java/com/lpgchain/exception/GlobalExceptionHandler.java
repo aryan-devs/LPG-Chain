@@ -106,14 +106,44 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles MaxUploadSizeExceededException thrown when a multipart upload exceeds the configured limit.
+     * Returns a 413 Payload Too Large (or 400 Bad Request) with a clear human-readable message.
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceeded(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                "File upload failed: Document file exceeds maximum allowed limit of 10MB.",
+                Map.of("file", "File size must not exceed 10MB")
+        );
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorResponse);
+    }
+
+    /**
+     * Handles SecurityException (e.g. path traversal attempts).
+     */
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<ErrorResponse> handleSecurityException(SecurityException ex) {
+        ErrorResponse errorResponse = new ErrorResponse(
+                HttpStatus.FORBIDDEN.value(),
+                "Security violation: " + ex.getMessage(),
+                Map.of()
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
+    }
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /**
      * Catch-all handler for any unexpected exception.
      * Returns a safe 500 response without exposing internal details.
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
+        log.error("Unhandled exception caught in GlobalExceptionHandler: ", ex);
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "Internal server error",
+                ex.getMessage() != null ? ex.getMessage() : "Internal server error",
                 Map.of()
         );
 

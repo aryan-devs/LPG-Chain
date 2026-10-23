@@ -1,6 +1,8 @@
 package com.lpgchain.controller;
 
 import com.lpgchain.config.OpenApiConfig;
+import com.lpgchain.dto.DeliveryHandoverResponseDTO;
+import com.lpgchain.dto.DeliveryOtpVerificationDTO;
 import com.lpgchain.dto.DeliveryRequestDTO;
 import com.lpgchain.dto.DeliveryResponseDTO;
 import com.lpgchain.dto.DeliveryStatusUpdateDTO;
@@ -57,6 +59,20 @@ public class DeliveryController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
+    @GetMapping
+    @Operation(summary = "Get All Deliveries", description = "Retrieves all platform deliveries across all distributors. Restricted to administrators.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "All platform deliveries retrieved",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = DeliveryResponseDTO.class)))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Admin access required",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<List<DeliveryResponseDTO>> getAllDeliveries() {
+        return ResponseEntity.ok(deliveryService.getAllDeliveries());
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get Delivery by ID", description = "Retrieves delivery details. Caller must be the owning customer, assigned distributor member, or administrator.")
     @ApiResponses({
@@ -88,6 +104,22 @@ public class DeliveryController {
     public ResponseEntity<List<DeliveryResponseDTO>> getDeliveriesByCustomer(
             @Parameter(description = "Customer user ID", example = "101") @PathVariable Long customerId) {
         return ResponseEntity.ok(deliveryService.getDeliveriesByCustomerId(customerId));
+    }
+
+    @GetMapping("/booking/{bookingId}")
+    @Operation(summary = "Get Deliveries by Booking ID", description = "Retrieves all deliveries for a specific booking. Restricted to owning customer, assigned distributor member, or administrator.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Booking deliveries retrieved",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = DeliveryResponseDTO.class)))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Caller does not have access to this booking",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Booking not found")
+    })
+    public ResponseEntity<List<DeliveryResponseDTO>> getDeliveriesByBooking(
+            @Parameter(description = "Booking ID", example = "1001") @PathVariable Long bookingId) {
+        return ResponseEntity.ok(deliveryService.getDeliveriesByBookingId(bookingId));
     }
 
     @GetMapping("/distributor/{distributorId}")
@@ -178,5 +210,44 @@ public class DeliveryController {
             @Parameter(description = "New vehicle identifier", example = "5") @PathVariable Long vehicleId) {
         DeliveryResponseDTO updated = deliveryService.assignVehicle(id, vehicleId);
         return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/{id}/initiate-handover")
+    @Operation(summary = "Initiate Delivery Handover OTP", description = "Generates and dispatches delivery handover OTP to the customer's registered phone when driver reaches doorstep. Restricted to assigned driver, distributor member, or admin.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Handover OTP generated and dispatched",
+                    content = @Content(schema = @Schema(implementation = DeliveryHandoverResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid delivery state (not OUT_FOR_DELIVERY or already completed)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Caller is not authorized for driver handover",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Delivery not found")
+    })
+    public ResponseEntity<DeliveryHandoverResponseDTO> initiateHandover(
+            @Parameter(description = "Delivery unique identifier", example = "501") @PathVariable Long id) {
+        DeliveryHandoverResponseDTO response = deliveryService.initiateHandover(id);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/verify-otp")
+    @Operation(summary = "Verify OTP and Complete Delivery", description = "Verifies customer OTP submitted by assigned driver. Enforces retry limits, expiry, and transitions delivery to DELIVERED atomically.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "OTP successfully verified and delivery marked DELIVERED",
+                    content = @Content(schema = @Schema(implementation = DeliveryResponseDTO.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid OTP, maximum attempts exceeded, or expired OTP",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Caller is not authorized for driver handover",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Delivery not found")
+    })
+    public ResponseEntity<DeliveryResponseDTO> verifyOtp(
+            @Parameter(description = "Delivery unique identifier", example = "501") @PathVariable Long id,
+            @Valid @RequestBody DeliveryOtpVerificationDTO dto) {
+        DeliveryResponseDTO completed = deliveryService.verifyOtpAndCompleteDelivery(id, dto.getOtp());
+        return ResponseEntity.ok(completed);
     }
 }

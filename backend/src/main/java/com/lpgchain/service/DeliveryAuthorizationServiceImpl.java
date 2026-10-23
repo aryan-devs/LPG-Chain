@@ -256,4 +256,40 @@ public class DeliveryAuthorizationServiceImpl implements DeliveryAuthorizationSe
             throw new AccessDeniedException("Forbidden: Access denied to ingest location for vehicle #" + vehicle.getId());
         }
     }
+
+    @Override
+    public void checkCanPerformDriverHandover(Delivery delivery) {
+        Authentication auth = getAuthentication();
+        if (isAdmin(auth)) {
+            return;
+        }
+        if (isCustomer(auth)) {
+            throw new AccessDeniedException("Forbidden: Customers cannot perform driver delivery handover");
+        }
+        User user = getAuthenticatedUser();
+        Long distributorId = delivery.getDistributor() != null ? delivery.getDistributor().getId() : null;
+
+        // Distributor membership check
+        if (distributorId != null && isDistributorMember(distributorId, user)) {
+            return;
+        }
+
+        // Driver role or assigned driver phone/identity check
+        if (hasRole(auth, "ROLE_DRIVER") || hasRole(auth, "DRIVER")) {
+            if (delivery.getDriver() != null) {
+                if (user.getPhone() != null && user.getPhone().equals(delivery.getDriver().getPhone())) {
+                    return;
+                }
+                if (user.getName() != null && delivery.getDriver().getName() != null
+                        && user.getName().equalsIgnoreCase(delivery.getDriver().getName())) {
+                    return;
+                }
+            }
+            if (distributorId != null && isDistributorMember(distributorId, user)) {
+                return;
+            }
+        }
+
+        throw new AccessDeniedException("Forbidden: Caller is not authorized to perform handover for delivery #" + delivery.getId());
+    }
 }

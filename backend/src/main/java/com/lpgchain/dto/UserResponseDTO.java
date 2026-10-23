@@ -27,6 +27,9 @@ public class UserResponseDTO {
     @Schema(description = "User's primary delivery address", example = "42 Park Street, Kolkata")
     private String address;
 
+    @Schema(description = "User's primary system role", example = "CUSTOMER")
+    private String role;
+
     public UserResponseDTO() {
     }
 
@@ -36,6 +39,15 @@ public class UserResponseDTO {
         this.email = email;
         this.phone = phone;
         this.address = address;
+    }
+
+    public UserResponseDTO(Long id, String name, String email, String phone, String address, String role) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+        this.address = address;
+        this.role = role;
     }
 
     public Long getId() { return id; }
@@ -52,4 +64,7 @@ public class UserResponseDTO {
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
+
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
 }

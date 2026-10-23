@@ -36,6 +36,18 @@ public class User {
 
     private String address;
 
+    private String city;
+
+    private String state;
+
+    private String pincode;
+
+    @Column(name = "google_sub", unique = true)
+    private String googleSub;
+
+    @Column(name = "consumer_number")
+    private String consumerNumber;
+
     public User() {
     }
 
@@ -86,4 +98,19 @@ public class User {
 
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+
+    public String getPincode() { return pincode; }
+    public void setPincode(String pincode) { this.pincode = pincode; }
+
+    public String getGoogleSub() { return googleSub; }
+    public void setGoogleSub(String googleSub) { this.googleSub = googleSub; }
+
+    public String getConsumerNumber() { return consumerNumber; }
+    public void setConsumerNumber(String consumerNumber) { this.consumerNumber = consumerNumber; }
 }

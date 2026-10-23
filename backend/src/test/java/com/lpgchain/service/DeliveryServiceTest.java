@@ -22,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -55,6 +56,12 @@ class DeliveryServiceTest {
 
     @Mock
     private DeliveryAuthorizationService deliveryAuthorizationService;
+
+    @Mock
+    private com.lpgchain.service.notification.DeliveryNotificationService deliveryNotificationService;
+
+    @Mock
+    private org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     private final EntityMapper entityMapper = new EntityMapper();
 
@@ -94,7 +101,8 @@ class DeliveryServiceTest {
                 LocalDateTime.now(), null, null, null);
 
         deliveryService = new DeliveryService(deliveryRepository, bookingRepository, driverRepository,
-                vehicleRepository, distributorRepository, entityMapper, deliveryAuthorizationService);
+                vehicleRepository, distributorRepository, entityMapper, deliveryAuthorizationService,
+                deliveryNotificationService, passwordEncoder);
     }
 
     @Test
@@ -296,13 +304,28 @@ class DeliveryServiceTest {
         assertEquals("ON_DELIVERY", driver1.getStatus());
         assertEquals("IN_TRANSIT", vehicle1.getStatus());
 
-        // 3. OUT_FOR_DELIVERY -> DELIVERED
+        // 3. OUT_FOR_DELIVERY -> DELIVERED (requires OTP verified)
+        delivery.setOtpVerifiedAt(LocalDateTime.now());
         DeliveryResponseDTO res3 = deliveryService.updateDeliveryStatus(501L, "DELIVERED");
         assertEquals("DELIVERED", res3.getStatus());
         assertNotNull(res3.getDeliveredAt());
         assertEquals("AVAILABLE", driver1.getStatus());
         assertEquals("AVAILABLE", vehicle1.getStatus());
         assertEquals("DELIVERED", booking.getStatus());
+    }
+
+    @Test
+    @DisplayName("updateDeliveryStatus: rejects DELIVERED transition when OTP is not verified")
+    void updateDeliveryStatus_RejectsDeliveredWithoutOtpVerification() {
+        // ARRANGE
+        delivery.setStatus("OUT_FOR_DELIVERY");
+        delivery.setOtpVerifiedAt(null);
+        when(deliveryRepository.findByIdWithDetails(501L)).thenReturn(Optional.of(delivery));
+
+        // ACT & ASSERT
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+                () -> deliveryService.updateDeliveryStatus(501L, "DELIVERED"));
+        assertTrue(ex.getMessage().contains("Direct transition to DELIVERED is not permitted"));
     }
 
     @Test
@@ -318,15 +341,56 @@ class DeliveryServiceTest {
     }
 
     @Test
-    @DisplayName("updateDeliveryStatus: rejects any transition once DELIVERED (terminal state)")
-    void updateDeliveryStatus_DeliveredIsTerminal() {
+    @DisplayName("updateDeliveryStatus: allows direct dispatch ASSIGNED -> OUT_FOR_DELIVERY")
+    void updateDeliveryStatus_DirectDispatch() {
         // ARRANGE
-        delivery.setStatus("DELIVERED");
+        delivery.setStatus("ASSIGNED");
+        delivery.setPickedUpAt(null);
         when(deliveryRepository.findByIdWithDetails(501L)).thenReturn(Optional.of(delivery));
+        when(deliveryRepository.save(any(Delivery.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // ACT
+        DeliveryResponseDTO result = deliveryService.updateDeliveryStatus(501L, "OUT_FOR_DELIVERY");
+
+        // ASSERT
+        assertEquals("OUT_FOR_DELIVERY", result.getStatus());
+        assertNotNull(result.getOutForDeliveryAt());
+        assertNotNull(result.getPickedUpAt()); // auto-populated on direct depot dispatch
+        assertEquals("ON_DELIVERY", driver1.getStatus());
+        assertEquals("IN_TRANSIT", vehicle1.getStatus());
+        assertEquals("OUT_FOR_DELIVERY", booking.getStatus());
+    }
+
+    @Test
+    @DisplayName("getDeliveriesByBookingId: returns deliveries associated with booking")
+    void getDeliveriesByBookingId_Success() {
+        // ARRANGE
+        when(bookingRepository.findById(1001L)).thenReturn(Optional.of(booking));
+        when(deliveryAuthorizationService.isAdmin(any())).thenReturn(true);
+        when(deliveryRepository.findByBookingId(1001L)).thenReturn(List.of(delivery));
+
+        // ACT
+        List<DeliveryResponseDTO> results = deliveryService.getDeliveriesByBookingId(1001L);
+
+        // ASSERT
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertEquals(501L, results.get(0).getId());
+    }
+
+    @Test
+    @DisplayName("createDelivery: provides informative message with active delivery details on duplicate attempt")
+    void createDelivery_DuplicateActiveDelivery_InformativeError() {
+        // ARRANGE
+        DeliveryRequestDTO dto = new DeliveryRequestDTO(1001L, 10L, 5L, 1L);
+        when(bookingRepository.findById(1001L)).thenReturn(Optional.of(booking));
+        when(deliveryRepository.existsByBookingIdAndStatusIn(eq(1001L), any())).thenReturn(true);
+        when(deliveryRepository.findByBookingId(1001L)).thenReturn(List.of(delivery));
 
         // ACT & ASSERT
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> deliveryService.updateDeliveryStatus(501L, "PICKED_UP"));
-        assertTrue(ex.getMessage().contains("Transition from DELIVERED to PICKED_UP is not allowed"));
+                () -> deliveryService.createDelivery(dto));
+        assertTrue(ex.getMessage().contains("already has an active delivery in progress"));
+        assertTrue(ex.getMessage().contains("Delivery #501"));
     }
 }

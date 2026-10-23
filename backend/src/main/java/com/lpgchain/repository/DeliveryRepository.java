@@ -66,4 +66,22 @@ public interface DeliveryRepository extends JpaRepository<Delivery, Long> {
             "LEFT JOIN FETCH d.distributor " +
             "WHERE d.driver.id = :driverId ORDER BY d.assignedAt DESC")
     List<Delivery> findByDriverIdWithDetails(@Param("driverId") Long driverId);
+
+    @Query("SELECT d FROM Delivery d " +
+            "JOIN FETCH d.booking b " +
+            "JOIN FETCH b.customer " +
+            "LEFT JOIN FETCH d.driver " +
+            "LEFT JOIN FETCH d.vehicle " +
+            "LEFT JOIN FETCH d.distributor " +
+            "WHERE b.id = :bookingId ORDER BY d.assignedAt DESC")
+    List<Delivery> findByBookingIdWithDetails(@Param("bookingId") Long bookingId);
+
+    @Query("SELECT d FROM Delivery d " +
+            "JOIN FETCH d.booking b " +
+            "JOIN FETCH b.customer " +
+            "LEFT JOIN FETCH d.driver " +
+            "LEFT JOIN FETCH d.vehicle " +
+            "LEFT JOIN FETCH d.distributor " +
+            "ORDER BY d.assignedAt DESC")
+    List<Delivery> findAllWithDetails();
 }

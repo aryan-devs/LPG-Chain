@@ -324,7 +324,8 @@ class DeliverySecurityIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OUT_FOR_DELIVERY"));
 
-        // 3. OUT_FOR_DELIVERY -> DELIVERED
+        // 3. OUT_FOR_DELIVERY -> DELIVERED (after OTP verified)
+        deliveryA.setOtpVerifiedAt(LocalDateTime.now());
         DeliveryStatusUpdateDTO step3 = new DeliveryStatusUpdateDTO("DELIVERED");
         mockMvc.perform(patch("/api/deliveries/501/status")
                         .header("Authorization", distributorAToken)

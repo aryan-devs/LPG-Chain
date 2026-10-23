@@ -50,7 +50,39 @@ out/
 # Place DB_URL / DB_USERNAME / DB_PASSWORD here — never commit this file.
 backend/.env
 backend/**/.env
+frontend/.env
+frontend/.env.*
+frontend/**/.env
+ml/.env
+ml/**/.env
 **/application-local.properties
+!**/.env.example
+!**/.env.template
+
+# --- Uploaded Documents & Citizen KYC PII ---
+uploads/
+**/uploads/
+backend/uploads/
+
+# --- Python & ML Environments ---
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+**/venv/
+**/ENV/
+**/env/
+ml/.venv/
+*.egg-info/
+
+# --- Local Database Files & Dumps ---
+*.db
+*.sqlite
+*.sqlite3
+*.h2.db
+*.dump
+*.sql.gz
 
 # --- IDE & Editor Files ---
 .idea/

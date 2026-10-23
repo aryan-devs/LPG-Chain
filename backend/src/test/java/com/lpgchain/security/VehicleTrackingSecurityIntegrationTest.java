@@ -53,6 +53,9 @@ class VehicleTrackingSecurityIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired(required = false)
+    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+
     @MockBean
     private UserRepository userRepository;
 
@@ -102,6 +105,16 @@ class VehicleTrackingSecurityIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.delete("vehicle:101:latest-location");
+                redisTemplate.delete("vehicle:202:latest-location");
+                redisTemplate.delete("vehicle:10:latest-location");
+                redisTemplate.delete("lpgchain:tracking:latest:101");
+                redisTemplate.delete("lpgchain:tracking:latest:202");
+            } catch (Exception ignored) {
+            }
+        }
         Role adminRole = new Role(1L, "ADMIN");
         Role customerRole = new Role(2L, "CUSTOMER");
         Role distributorRole = new Role(3L, "DISTRIBUTOR");

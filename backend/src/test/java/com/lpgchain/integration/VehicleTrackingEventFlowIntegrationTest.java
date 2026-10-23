@@ -19,6 +19,7 @@ import com.lpgchain.repository.UserRoleRepository;
 import com.lpgchain.repository.VehicleLocationRepository;
 import com.lpgchain.repository.VehicleRepository;
 import com.lpgchain.security.JwtTokenProvider;
+import com.lpgchain.service.VehicleTrackingRedisPublisher;
 import com.lpgchain.service.VehicleTrackingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -75,6 +76,9 @@ class VehicleTrackingEventFlowIntegrationTest {
 
     @MockBean
     private DistributorMembershipRepository distributorMembershipRepository;
+
+    @MockBean
+    private VehicleTrackingRedisPublisher vehicleTrackingRedisPublisher;
 
     private Vehicle vehicle;
     private Delivery activeDelivery;

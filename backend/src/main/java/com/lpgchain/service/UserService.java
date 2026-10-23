@@ -2,6 +2,7 @@ package com.lpgchain.service;
 
 import com.lpgchain.dto.UserRequestDTO;
 import com.lpgchain.dto.UserResponseDTO;
+import com.lpgchain.entity.Role;
 import com.lpgchain.entity.User;
 import com.lpgchain.entity.UserRole;
 import com.lpgchain.mapper.EntityMapper;
@@ -55,13 +56,26 @@ public class UserService {
 
     public List<UserResponseDTO> getAllUsers() {
         return userRepository.findAll().stream()
-                .map(entityMapper::toUserResponseDTO)
+                .map(this::mapUserWithRole)
                 .toList();
     }
 
     public Optional<UserResponseDTO> getUserById(Long id) {
         return userRepository.findById(id)
-                .map(entityMapper::toUserResponseDTO);
+                .map(this::mapUserWithRole);
+    }
+
+    private UserResponseDTO mapUserWithRole(User user) {
+        UserResponseDTO dto = entityMapper.toUserResponseDTO(user);
+        if (dto != null && userRoleRepository != null) {
+            List<UserRole> roles = userRoleRepository.findByUser(user);
+            if (roles != null && !roles.isEmpty() && roles.get(0).getRole() != null) {
+                dto.setRole(roles.get(0).getRole().getName());
+            } else {
+                dto.setRole("CUSTOMER");
+            }
+        }
+        return dto;
     }
 
     /**
@@ -82,13 +96,13 @@ public class UserService {
             throw new IllegalArgumentException("Email is already registered: " + request.getEmail());
         }
 
-        // Prevent privilege escalation: unauthenticated public registration cannot self-assign ADMIN or DISTRIBUTOR
+        // Prevent privilege escalation: unauthenticated public registration cannot self-assign ADMIN, DISTRIBUTOR, or other non-customer roles
         if (StringUtils.hasText(request.getRole())) {
             String roleUpper = request.getRole().trim().toUpperCase();
             if (roleUpper.startsWith("ROLE_")) {
                 roleUpper = roleUpper.substring(5);
             }
-            if ("ADMIN".equals(roleUpper) || "DISTRIBUTOR".equals(roleUpper)) {
+            if (!"CUSTOMER".equals(roleUpper)) {
                 throw new AccessDeniedException("Forbidden: Public registration does not permit self-assigning privileged roles (" + roleUpper + ")");
             }
         }
@@ -98,13 +112,14 @@ public class UserService {
 
         // Provision default CUSTOMER role
         if (roleRepository != null && userRoleRepository != null) {
-            roleRepository.findByName("CUSTOMER").ifPresent(customerRole -> {
-                userRepository.findById(saved.getId()).ifPresent(persistedUser -> {
-                    userRoleRepository.save(new UserRole(persistedUser, customerRole));
-                });
+            Role customerRole = roleRepository.findByName("CUSTOMER")
+                    .orElseGet(() -> roleRepository.save(new Role("CUSTOMER")));
+            userRepository.findById(saved.getId()).ifPresent(persistedUser -> {
+                userRoleRepository.save(new UserRole(persistedUser, customerRole));
             });
         }
 
+        saved.setRole("CUSTOMER");
         return saved;
     }
 

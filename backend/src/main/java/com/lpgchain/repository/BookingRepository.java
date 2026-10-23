@@ -14,6 +14,8 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByCustomerId(Long customerId);
 
+    Optional<Booking> findByBookingNumber(String bookingNumber);
+
     List<Booking> findByDistributorId(Long distributorId);
 
     @Query("SELECT b FROM Booking b JOIN FETCH b.customer LEFT JOIN FETCH b.distributor ORDER BY b.bookingDate DESC")
@@ -27,4 +29,10 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     @Query("SELECT b FROM Booking b JOIN FETCH b.customer LEFT JOIN FETCH b.distributor WHERE b.id = :id")
     Optional<Booking> findByIdWithDetails(@Param("id") Long id);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.id = :id")
+    Optional<Booking> findByIdWithLock(@Param("id") Long id);
+
+    List<Booking> findByDistributorIdAndStatus(Long distributorId, String status);
 }

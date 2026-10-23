@@ -9,9 +9,14 @@ import com.lpgchain.entity.Role;
 import com.lpgchain.entity.User;
 import com.lpgchain.entity.UserRole;
 import com.lpgchain.repository.BookingRepository;
+import com.lpgchain.repository.ComplaintRepository;
+import com.lpgchain.repository.CustomerDocumentRepository;
+import com.lpgchain.repository.DeliveryRepository;
 import com.lpgchain.repository.DistributorMembershipRepository;
 import com.lpgchain.repository.DistributorRepository;
+import com.lpgchain.repository.PaymentRepository;
 import com.lpgchain.repository.RoleRepository;
+import com.lpgchain.repository.SavedAddressRepository;
 import com.lpgchain.repository.UserRepository;
 import com.lpgchain.repository.UserRoleRepository;
 import com.lpgchain.security.PasswordService;
@@ -74,6 +79,11 @@ class AuthControllerIntegrationTest {
     @Autowired private DistributorRepository distributorRepository;
     @Autowired private DistributorMembershipRepository distributorMembershipRepository;
     @Autowired private BookingRepository bookingRepository;
+    @Autowired private PaymentRepository paymentRepository;
+    @Autowired private DeliveryRepository deliveryRepository;
+    @Autowired private ComplaintRepository complaintRepository;
+    @Autowired private CustomerDocumentRepository customerDocumentRepository;
+    @Autowired private SavedAddressRepository savedAddressRepository;
 
     private User customerUserA;
     private User customerUserB;
@@ -91,9 +101,9 @@ class AuthControllerIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        customerRole    = roleRepository.save(new Role("CUSTOMER"));
-        distributorRole = roleRepository.save(new Role("DISTRIBUTOR"));
-        adminRole       = roleRepository.save(new Role("ADMIN"));
+        customerRole    = roleRepository.findByName("CUSTOMER").orElseGet(() -> roleRepository.save(new Role("CUSTOMER")));
+        distributorRole = roleRepository.findByName("DISTRIBUTOR").orElseGet(() -> roleRepository.save(new Role("DISTRIBUTOR")));
+        adminRole       = roleRepository.findByName("ADMIN").orElseGet(() -> roleRepository.save(new Role("ADMIN")));
 
         String hashedPassword = passwordService.encode(RAW_PASSWORD);
 
@@ -141,12 +151,16 @@ class AuthControllerIntegrationTest {
 
     @AfterEach
     void tearDown() {
+        deliveryRepository.deleteAll();
+        paymentRepository.deleteAll();
+        complaintRepository.deleteAll();
+        customerDocumentRepository.deleteAll();
+        savedAddressRepository.deleteAll();
         bookingRepository.deleteAll();
         distributorMembershipRepository.deleteAll();
         userRoleRepository.deleteAll();
         userRepository.deleteAll();
         distributorRepository.deleteAll();
-        roleRepository.deleteAll();
     }
 
     // =========================================================================
@@ -853,6 +867,85 @@ class AuthControllerIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.message").value("Forbidden: Cannot create a booking on behalf of another customer"));
+    }
+
+    // =========================================================================
+    // GROUP 10: UNIFIED AUTH & CUSTOMER REGISTRATION INTEGRATION
+    // =========================================================================
+
+    @Test
+    @DisplayName("AUTH-REG-01: Public customer registration succeeds via /api/auth/register and allows immediate login")
+    void shouldRegisterCustomerViaAuthEndpointAndLogin() throws Exception {
+        String registerJson = "{\"name\":\"New Customer\",\"email\":\"new.customer@gmail.com\",\"password\":\"Pass@12345\"}";
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("new.customer@gmail.com"))
+                .andExpect(jsonPath("$.role").value("CUSTOMER"))
+                .andExpect(jsonPath("$.password").doesNotExist());
+
+        // Validate immediate login works with registered credentials
+        String loginJson = "{\"email\":\"new.customer@gmail.com\",\"password\":\"Pass@12345\"}";
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activeRole").value("CUSTOMER"))
+                .andExpect(jsonPath("$.token").isString());
+    }
+
+    @Test
+    @DisplayName("AUTH-REG-02: Duplicate customer registration is rejected with 400 Bad Request")
+    void shouldRejectDuplicateCustomerRegistrationViaAuthEndpoint() throws Exception {
+        String registerJson = "{\"name\":\"Customer A Duplicate\",\"email\":\"customerA@integration.test\",\"password\":\"Pass@12345\"}";
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    @DisplayName("AUTH-REG-03: Public registration attempting ADMIN role is rejected with 403 Forbidden")
+    void shouldRejectAdminRoleInPublicRegistrationViaAuthEndpoint() throws Exception {
+        String registerJson = "{\"name\":\"Hacker Admin\",\"email\":\"hacker@gmail.com\",\"password\":\"Pass@12345\",\"role\":\"ADMIN\"}";
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    @DisplayName("AUTH-REG-04: Public registration attempting DISTRIBUTOR role is rejected with 403 Forbidden")
+    void shouldRejectDistributorRoleInPublicRegistrationViaAuthEndpoint() throws Exception {
+        String registerJson = "{\"name\":\"Hacker Dist\",\"email\":\"hacker@agency.example\",\"password\":\"Pass@12345\",\"role\":\"DISTRIBUTOR\"}";
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    @Test
+    @DisplayName("AUTH-ROLE-01: User with no assigned roles is rejected during login with 403 Forbidden")
+    void shouldRejectLoginForUserWithNoAssignedRoles() throws Exception {
+        User noRoleUser = userRepository.save(
+                new User("Orphan User", "orphan@gmail.com", passwordService.encode(RAW_PASSWORD)));
+
+        String loginJson = "{\"email\":\"orphan@gmail.com\",\"password\":\"" + RAW_PASSWORD + "\"}";
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.message").value("Forbidden: User account has no assigned roles. Please contact administrator."));
     }
 
     // =========================================================================

@@ -140,19 +140,8 @@ public class AuthService {
                     "Multiple roles available. Select a role."
             );
         } else {
-            String token = jwtTokenProvider.generateToken(user.getId(), user.getEmail());
-            return new LoginResponseDTO(
-                    user.getId(),
-                    user.getName(),
-                    user.getEmail(),
-                    List.of(),
-                    false,
-                    null,
-                    null,
-                    false,
-                    token,
-                    "Login successful"
-            );
+            // User exists in database but has no roles assigned: fail securely
+            throw new AccessDeniedException("Forbidden: User account has no assigned roles. Please contact administrator.");
         }
     }
 
