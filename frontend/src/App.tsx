@@ -13,6 +13,7 @@ import { DistributorNetworkView } from './components/capabilities/DistributorNet
 import { HouseholdPortal } from './components/portal/HouseholdPortal';
 import { DistributorPortal } from './components/distributor/DistributorPortal';
 import { AdminPortal } from './components/admin/AdminPortal';
+import { getApiBaseUrl } from './services/trackingApi';
 
 // ----------------------------------------------------------------
 // Types
@@ -160,7 +161,7 @@ function App() {
     const checkHealth = async () => {
       try {
         setBackendStatus('loading');
-        const response = await fetch('/api/health');
+        const response = await fetch(`${getApiBaseUrl()}/api/health`);
         if (!response.ok) {
           if (isMounted) {
             setBackendStatus('down');

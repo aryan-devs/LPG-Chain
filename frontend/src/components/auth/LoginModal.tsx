@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Loader2,
 } from 'lucide-react';
+import { getApiBaseUrl } from '../../services/trackingApi';
 
 declare global {
   interface Window {
@@ -117,7 +118,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const res = await fetch('/api/auth/google', {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken: idToken.trim() }),
@@ -236,7 +237,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmedEmail, password }),
@@ -286,7 +287,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const res = await fetch('/api/auth/select-role', {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/select-role`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -385,7 +386,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -410,7 +411,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       setSuccessMessage('Customer account created successfully! Signing you in...');
 
       // Immediately log in using the newly created credentials
-      const loginRes = await fetch('/api/auth/login', {
+      const loginRes = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: trimmedEmail, password: regPassword }),
