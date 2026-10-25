@@ -5,16 +5,25 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.lpgchain.service.VehicleTrackingRedisSubscriber;
+import io.lettuce.core.RedisURI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisPassword;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import java.time.Duration;
 
 /**
  * RedisConfig — Configures Spring Data Redis connectivity, explicit Jackson JSON serialization,
@@ -24,6 +33,55 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 public class RedisConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RedisConfig.class);
+
+    /**
+     * Configures the RedisConnectionFactory.
+     * Supports cloud deployments using REDIS_URL with TLS (e.g. rediss://... on Render / Upstash)
+     * while preserving standalone host/port/password configuration for local development.
+     */
+    @Bean
+    public RedisConnectionFactory redisConnectionFactory(
+            @Value("${spring.data.redis.url:${REDIS_URL:}}") String redisUrl,
+            @Value("${spring.data.redis.host:${REDIS_HOST:localhost}}") String host,
+            @Value("${spring.data.redis.port:${REDIS_PORT:6379}}") int port,
+            @Value("${spring.data.redis.password:${REDIS_PASSWORD:}}") String password,
+            @Value("${spring.data.redis.timeout:${REDIS_TIMEOUT:2000}}") long timeoutMillis) {
+
+        Duration timeout = Duration.ofMillis(timeoutMillis > 0 ? timeoutMillis : 2000);
+
+        if (redisUrl != null && !redisUrl.trim().isEmpty()) {
+            String trimmedUrl = redisUrl.trim();
+            RedisURI redisUri = RedisURI.create(trimmedUrl);
+            redisUri.setTimeout(timeout);
+
+            LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder =
+                    LettuceClientConfiguration.builder().commandTimeout(timeout);
+
+            boolean useSsl = trimmedUrl.startsWith("rediss://") || redisUri.isSsl();
+            if (useSsl) {
+                clientConfigBuilder.useSsl();
+            }
+
+            RedisConfiguration redisConfig = LettuceConnectionFactory.createRedisConfiguration(redisUri);
+            log.info("Configuring LettuceConnectionFactory with REDIS_URL [host={}, port={}, ssl={}]",
+                    redisUri.getHost(), redisUri.getPort(), useSsl);
+
+            return new LettuceConnectionFactory(redisConfig, clientConfigBuilder.build());
+        }
+
+        // Standalone fallback: local development or containerized Redis
+        RedisStandaloneConfiguration standaloneConfig = new RedisStandaloneConfiguration(host, port);
+        if (password != null && !password.trim().isEmpty()) {
+            standaloneConfig.setPassword(RedisPassword.of(password.trim()));
+        }
+
+        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+                .commandTimeout(timeout)
+                .build();
+
+        log.info("Configuring LettuceConnectionFactory with standalone host [{}:{}]", host, port);
+        return new LettuceConnectionFactory(standaloneConfig, clientConfig);
+    }
 
     /**
      * Pub/Sub channel topic bean for vehicle tracking event distribution.
