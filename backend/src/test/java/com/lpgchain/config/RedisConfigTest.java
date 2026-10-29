@@ -59,7 +59,7 @@ class RedisConfigTest {
     }
 
     @Test
-    @DisplayName("REDIS: Listener container initializes with bounded exponential backoff and safe autoStartup toggle")
+    @DisplayName("REDIS: Listener container initializes with bounded exponential backoff and non-blocking autoStartup=false")
     void testRedisMessageListenerContainerConfiguration() {
         RedisConfig config = new RedisConfig();
         RedisConnectionFactory mockFactory = mock(RedisConnectionFactory.class);
@@ -67,47 +67,31 @@ class RedisConfigTest {
         VehicleTrackingRedisSubscriber subscriber = new VehicleTrackingRedisSubscriber(new ObjectMapper(), mockPublisher);
         ChannelTopic topic = new ChannelTopic("lpgchain:tracking:vehicle-location");
         RedisProperties properties = new RedisProperties();
-        properties.setListenerAutoStartup(false);
+        properties.setListenerAutoStartup(true);
 
         RedisMessageListenerContainer container = config.redisMessageListenerContainer(
                 mockFactory, subscriber, topic, properties);
 
         assertNotNull(container);
-        assertFalse(container.isAutoStartup(), "Listener autoStartup should match RedisProperties");
+        assertFalse(container.isAutoStartup(), "Listener autoStartup MUST be false so Spring Boot never blocks Tomcat during context refresh");
     }
 
     @Test
-    @DisplayName("REDIS: Degraded subscription exception handler catches errors and applies backoff without crashing")
-    void testDegradedListenerSubscriptionExceptionHandling() throws Exception {
+    @DisplayName("REDIS: Async starter respects disabled configuration switch")
+    void testAsyncStarterDisabledSwitch() {
         RedisConfig config = new RedisConfig();
-        RedisConnectionFactory mockFactory = mock(RedisConnectionFactory.class);
-        VehicleTrackingEventPublisher mockPublisher = mock(VehicleTrackingEventPublisher.class);
-        VehicleTrackingRedisSubscriber subscriber = new VehicleTrackingRedisSubscriber(new ObjectMapper(), mockPublisher);
-        ChannelTopic topic = new ChannelTopic("lpgchain:tracking:vehicle-location");
-        RedisProperties properties = new RedisProperties();
+        org.springframework.boot.context.event.ApplicationReadyEvent mockEvent =
+                mock(org.springframework.boot.context.event.ApplicationReadyEvent.class);
+        org.springframework.context.ConfigurableApplicationContext mockContext =
+                mock(org.springframework.context.ConfigurableApplicationContext.class);
 
-        RedisMessageListenerContainer container = config.redisMessageListenerContainer(
-                mockFactory, subscriber, topic, properties);
+        RedisProperties disabledProps = new RedisProperties();
+        disabledProps.setListenerAutoStartup(false);
 
-        // Access the protected handleSubscriptionException method via reflection
-        Method method = container.getClass().getDeclaredMethod(
-                "handleSubscriptionException",
-                CompletableFuture.class,
-                BackOffExecution.class,
-                Throwable.class
-        );
-        method.setAccessible(true);
+        when(mockEvent.getApplicationContext()).thenReturn(mockContext);
+        when(mockContext.getBean(RedisProperties.class)).thenReturn(disabledProps);
 
-        CompletableFuture<Void> future = new CompletableFuture<>();
-        BackOffExecution mockBackoff = mock(BackOffExecution.class);
-        when(mockBackoff.nextBackOff()).thenReturn(10L); // 10ms for quick test sleep
-
-        Throwable testException = new RuntimeException("Simulated Upstash connection drop");
-
-        assertDoesNotThrow(() -> {
-            method.invoke(container, future, mockBackoff, testException);
-        });
-
-        verify(mockBackoff).nextBackOff();
+        assertDoesNotThrow(() -> config.startRedisListenerAsync(mockEvent));
+        verify(mockContext, never()).getBean(RedisMessageListenerContainer.class);
     }
 }

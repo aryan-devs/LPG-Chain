@@ -149,8 +149,9 @@ public class RedisConfig {
 
     /**
      * Asynchronous message listener container for Redis Pub/Sub subscriber.
-     * Implements bounded exponential backoff and throttled logging to prevent log storms
-     * during temporary network disconnects or cold serverless Redis starts.
+     * Configured with autoStartup=false so Spring's DefaultLifecycleProcessor NEVER blocks
+     * embedded Tomcat or context refresh on Redis connectivity.
+     * Bounded exponential backoff and non-blocking recovery ensure robust fault-tolerance.
      */
     @Bean
     public RedisMessageListenerContainer redisMessageListenerContainer(
@@ -164,34 +165,24 @@ public class RedisConfig {
 
             @Override
             public boolean isAutoStartup() {
-                return redisProperties.isListenerAutoStartup();
+                // Always false during Spring context refresh to guarantee Tomcat starts and
+                // opens the server port immediately without blocking on cloud Redis handshakes.
+                return false;
             }
 
             @Override
             protected void handleSubscriptionException(CompletableFuture<Void> future, BackOffExecution backoff, Throwable ex) {
                 consecutiveFailures++;
-                long interval = backoff.nextBackOff();
-
-                if (interval == BackOffExecution.STOP) {
-                    log.error("[REDIS-DEGRADED] Redis Pub/Sub subscription stopped after {} consecutive failures: {}. Live tracking disabled. Core authentication and database APIs remain fully operational.",
-                            consecutiveFailures, ex.getMessage());
-                    future.completeExceptionally(ex);
-                    return;
-                }
-
                 // Throttle logs: log concise warnings without flooding Render with massive multi-page stack traces
                 if (consecutiveFailures <= 3 || consecutiveFailures % 10 == 0) {
-                    log.warn("[REDIS-DEGRADED] Redis Pub/Sub connection attempt #{} failed: {}. Retrying in {}s. (Core database & auth remain fully operational).",
-                            consecutiveFailures, ex.getMessage(), interval / 1000);
+                    log.warn("[REDIS-DEGRADED] Redis Pub/Sub subscription attempt #{} failed: {}. Recovery scheduled by backoff. Core database & auth remain fully operational.",
+                            consecutiveFailures, ex.getMessage());
                 } else {
                     log.debug("[REDIS-DEGRADED] Redis Pub/Sub reconnect attempt #{} failed: {}", consecutiveFailures, ex.getMessage());
                 }
 
-                try {
-                    Thread.sleep(interval);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                }
+                // Delegate to superclass which schedules recovery asynchronously via task executor without blocking
+                super.handleSubscriptionException(future, backoff, ex);
             }
         };
 
@@ -203,10 +194,55 @@ public class RedisConfig {
         container.addMessageListener(subscriber, trackingChannelTopic);
         container.setRecoveryBackoff(backOff);
         container.setErrorHandler(throwable ->
-                log.error("Redis Pub/Sub message execution error: {}", throwable.getMessage()));
+                log.warn("[REDIS-DEGRADED] Redis Pub/Sub message execution error: {}", throwable.getMessage()));
 
-        log.info("RedisMessageListenerContainer initialized for channel [{}] (autoStartup={})",
-                redisProperties.getTrackingChannel(), redisProperties.isListenerAutoStartup());
+        log.info("RedisMessageListenerContainer initialized for channel [{}] (autoStartup=false for non-blocking server start)",
+                redisProperties.getTrackingChannel());
         return container;
+    }
+
+    /**
+     * Non-blocking background starter: kicks off Redis Pub/Sub listener ONLY after Tomcat
+     * is already listening on the assigned port and Spring Boot application is fully ready.
+     */
+    @org.springframework.context.event.EventListener(org.springframework.boot.context.event.ApplicationReadyEvent.class)
+    public void startRedisListenerAsync(org.springframework.boot.context.event.ApplicationReadyEvent event) {
+        RedisProperties properties = event.getApplicationContext().getBean(RedisProperties.class);
+        if (!properties.isListenerAutoStartup()) {
+            log.info("Redis listener auto-startup disabled by configuration (lpgchain.redis.listener-auto-startup=false). Skipping background start.");
+            return;
+        }
+
+        RedisMessageListenerContainer container = event.getApplicationContext().getBean(RedisMessageListenerContainer.class);
+
+        Thread starterThread = new Thread(() -> {
+            long delay = 5000L;
+            int attempt = 1;
+            while (attempt <= 10 && !container.isRunning()) {
+                try {
+                    log.info("Starting RedisMessageListenerContainer asynchronously in background (attempt #{})...", attempt);
+                    container.start();
+                    log.info("RedisMessageListenerContainer started successfully in background.");
+                    return;
+                } catch (Exception ex) {
+                    log.warn("[REDIS-DEGRADED] Redis Pub/Sub background listener attempt #{} could not connect: {}. Retrying in {}s. (Core database & auth remain fully operational).",
+                            attempt, ex.getMessage(), delay / 1000);
+                    try {
+                        Thread.sleep(delay);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                    delay = Math.min((long) (delay * 1.5), 60000L);
+                    attempt++;
+                }
+            }
+            if (!container.isRunning()) {
+                log.warn("[REDIS-DEGRADED] Redis Pub/Sub background listener ceased retry after 10 attempts. Live tracking remains degraded. Core database and auth remain fully operational.");
+            }
+        }, "redis-listener-async-starter");
+
+        starterThread.setDaemon(true);
+        starterThread.start();
     }
 }
