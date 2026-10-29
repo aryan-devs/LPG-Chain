@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.lpgchain.service.VehicleTrackingRedisSubscriber;
+import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisURI;
+import io.lettuce.core.SocketOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,12 +24,18 @@ import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.util.backoff.BackOffExecution;
+import org.springframework.util.backoff.ExponentialBackOff;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * RedisConfig — Configures Spring Data Redis connectivity, explicit Jackson JSON serialization,
  * Pub/Sub channel topics, and asynchronous message listener containers.
+ *
+ * Designed for graceful degradation: if Redis is temporarily unreachable or misconfigured in production,
+ * core authentication, database transactions, and APIs remain 100% operational.
  */
 @Configuration
 public class RedisConfig {
@@ -45,9 +53,20 @@ public class RedisConfig {
             @Value("${spring.data.redis.host:${REDIS_HOST:localhost}}") String host,
             @Value("${spring.data.redis.port:${REDIS_PORT:6379}}") int port,
             @Value("${spring.data.redis.password:${REDIS_PASSWORD:}}") String password,
-            @Value("${spring.data.redis.timeout:${REDIS_TIMEOUT:2000}}") long timeoutMillis) {
+            @Value("${spring.data.redis.timeout:${REDIS_TIMEOUT:10000}}") long timeoutMillis) {
 
-        Duration timeout = Duration.ofMillis(timeoutMillis > 0 ? timeoutMillis : 2000);
+        Duration timeout = Duration.ofMillis(timeoutMillis > 0 ? timeoutMillis : 10000);
+
+        SocketOptions socketOptions = SocketOptions.builder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .keepAlive(true)
+                .build();
+
+        ClientOptions clientOptions = ClientOptions.builder()
+                .socketOptions(socketOptions)
+                .autoReconnect(true)
+                .disconnectedBehavior(ClientOptions.DisconnectedBehavior.REJECT_COMMANDS)
+                .build();
 
         if (redisUrl != null && !redisUrl.trim().isEmpty()) {
             String trimmedUrl = redisUrl.trim();
@@ -55,7 +74,9 @@ public class RedisConfig {
             redisUri.setTimeout(timeout);
 
             LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder =
-                    LettuceClientConfiguration.builder().commandTimeout(timeout);
+                    LettuceClientConfiguration.builder()
+                            .commandTimeout(timeout)
+                            .clientOptions(clientOptions);
 
             boolean useSsl = trimmedUrl.startsWith("rediss://") || redisUri.isSsl();
             if (useSsl) {
@@ -63,10 +84,13 @@ public class RedisConfig {
             }
 
             RedisConfiguration redisConfig = LettuceConnectionFactory.createRedisConfiguration(redisUri);
-            log.info("Configuring LettuceConnectionFactory with REDIS_URL [host={}, port={}, ssl={}]",
-                    redisUri.getHost(), redisUri.getPort(), useSsl);
+            log.info("Configuring LettuceConnectionFactory with REDIS_URL [host={}, port={}, ssl={}, commandTimeout={}ms]",
+                    redisUri.getHost(), redisUri.getPort(), useSsl, timeout.toMillis());
 
-            return new LettuceConnectionFactory(redisConfig, clientConfigBuilder.build());
+            LettuceConnectionFactory factory = new LettuceConnectionFactory(redisConfig, clientConfigBuilder.build());
+            // Do not block application context startup if cloud Redis handshake is slow
+            factory.setValidateConnection(false);
+            return factory;
         }
 
         // Standalone fallback: local development or containerized Redis
@@ -77,10 +101,13 @@ public class RedisConfig {
 
         LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
                 .commandTimeout(timeout)
+                .clientOptions(clientOptions)
                 .build();
 
         log.info("Configuring LettuceConnectionFactory with standalone host [{}:{}]", host, port);
-        return new LettuceConnectionFactory(standaloneConfig, clientConfig);
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig, clientConfig);
+        factory.setValidateConnection(false);
+        return factory;
     }
 
     /**
@@ -122,7 +149,8 @@ public class RedisConfig {
 
     /**
      * Asynchronous message listener container for Redis Pub/Sub subscriber.
-     * Manages background subscription tasks and reconnects on transient disconnects.
+     * Implements bounded exponential backoff and throttled logging to prevent log storms
+     * during temporary network disconnects or cold serverless Redis starts.
      */
     @Bean
     public RedisMessageListenerContainer redisMessageListenerContainer(
@@ -132,16 +160,50 @@ public class RedisConfig {
             RedisProperties redisProperties) {
 
         RedisMessageListenerContainer container = new RedisMessageListenerContainer() {
+            private int consecutiveFailures = 0;
+
             @Override
             public boolean isAutoStartup() {
                 return redisProperties.isListenerAutoStartup();
             }
+
+            @Override
+            protected void handleSubscriptionException(CompletableFuture<Void> future, BackOffExecution backoff, Throwable ex) {
+                consecutiveFailures++;
+                long interval = backoff.nextBackOff();
+
+                if (interval == BackOffExecution.STOP) {
+                    log.error("[REDIS-DEGRADED] Redis Pub/Sub subscription stopped after {} consecutive failures: {}. Live tracking disabled. Core authentication and database APIs remain fully operational.",
+                            consecutiveFailures, ex.getMessage());
+                    future.completeExceptionally(ex);
+                    return;
+                }
+
+                // Throttle logs: log concise warnings without flooding Render with massive multi-page stack traces
+                if (consecutiveFailures <= 3 || consecutiveFailures % 10 == 0) {
+                    log.warn("[REDIS-DEGRADED] Redis Pub/Sub connection attempt #{} failed: {}. Retrying in {}s. (Core database & auth remain fully operational).",
+                            consecutiveFailures, ex.getMessage(), interval / 1000);
+                } else {
+                    log.debug("[REDIS-DEGRADED] Redis Pub/Sub reconnect attempt #{} failed: {}", consecutiveFailures, ex.getMessage());
+                }
+
+                try {
+                    Thread.sleep(interval);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
         };
+
+        // Bounded exponential backoff: starts at 5s, grows by 1.5x up to 60s max interval
+        ExponentialBackOff backOff = new ExponentialBackOff(5000L, 1.5);
+        backOff.setMaxInterval(60000L);
+
         container.setConnectionFactory(connectionFactory);
         container.addMessageListener(subscriber, trackingChannelTopic);
-        container.setRecoveryInterval(5000L);
+        container.setRecoveryBackoff(backOff);
         container.setErrorHandler(throwable ->
-                log.error("Redis Pub/Sub message listener error: {}", throwable.getMessage(), throwable));
+                log.error("Redis Pub/Sub message execution error: {}", throwable.getMessage()));
 
         log.info("RedisMessageListenerContainer initialized for channel [{}] (autoStartup={})",
                 redisProperties.getTrackingChannel(), redisProperties.isListenerAutoStartup());
