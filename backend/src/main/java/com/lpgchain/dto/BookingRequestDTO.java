@@ -10,8 +10,7 @@ import java.time.LocalDateTime;
 @Schema(description = "Request payload for creating a new LPG cylinder booking")
 public class BookingRequestDTO {
 
-    @NotNull(message = "customerId is required")
-    @Schema(description = "Customer ID creating the booking", example = "1", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "Customer ID creating the booking (optional for authenticated customers; automatically bound from authentication)", example = "1")
     private Long customerId;
 
     @Schema(description = "Optional assigned distributor ID (can be assigned later by administrator)", example = "1")

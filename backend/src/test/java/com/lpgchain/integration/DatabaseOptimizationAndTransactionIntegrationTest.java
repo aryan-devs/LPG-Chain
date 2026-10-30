@@ -136,6 +136,7 @@ public class DatabaseOptimizationAndTransactionIntegrationTest {
         dto.setCustomerId(testCustomer.getId());
         dto.setDeliveryAddress("Flat 101, Galaxy Tower");
         dto.setQuantity(2);
+        dto.setDistributorId(testDistributor.getId());
 
         BookingService.StatusUpdateResult result = bookingService.createBookingFromDTO(dto);
 

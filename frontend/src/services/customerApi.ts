@@ -321,8 +321,9 @@ export class CustomerService {
     quantity: number;
     deliveryAddress: string;
     paymentMethod: 'UPI' | 'Card' | 'Cash on Delivery';
+    distributorId?: number;
   }): Promise<CustomerOrder> {
-    const profile = await this.getProfile();
+    const profile = await this.getProfile().catch(() => null);
     const categoryCode = orderData.capacityKg === 5
       ? 'DOMESTIC_5_0'
       : orderData.capacityKg === 19
@@ -330,72 +331,67 @@ export class CustomerService {
       : 'DOMESTIC_14_2';
 
     const pMethod = orderData.paymentMethod === 'Cash on Delivery' ? 'CASH_ON_DELIVERY' : 'DEMO_QR';
+    const baseUrl = getApiBaseUrl();
 
-    try {
-      const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/api/bookings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-        body: JSON.stringify({
-          customerId: Number(profile.id) || 1,
-          distributorId: 1,
-          cylinderCategory: categoryCode,
-          capacityKg: orderData.capacityKg,
-          quantity: orderData.quantity,
-          deliveryAddress: orderData.deliveryAddress,
-          paymentMethod: pMethod,
-        }),
-      });
-
-      if (res.ok) {
-        const saved = await res.json();
-        const created: CustomerOrder = {
-          id: saved.bookingNumber || `LPG${saved.id}`,
-          bookingIdNumber: saved.id,
-          cylinderType: orderData.cylinderType,
-          capacityKg: saved.capacityKg || orderData.capacityKg,
-          quantity: saved.quantity || orderData.quantity,
-          bookingDate: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
-          status: 'ASSIGNED',
-          expectedDelivery: 'Today, 2:30 PM',
-          amount: saved.totalAmount || (orderData.capacityKg === 19 ? 1785 : orderData.capacityKg === 5 ? 360 : 853),
-          subsidyAmount: saved.subsidyAmount || (orderData.capacityKg === 14.2 ? 200 : 0),
-          netPayable: saved.netAmount || (saved.totalAmount - (saved.subsidyAmount || 0)),
-          paymentStatus: 'PENDING',
-          paymentMethod: orderData.paymentMethod,
-          deliveryAddress: saved.deliveryAddress || orderData.deliveryAddress,
-          deliveryId: '1',
-          driverName: 'Ramesh Kumar',
-          driverPhone: '+91 98765 43210',
-          vehicleNumber: 'MH 12 AB 4587',
-        };
-
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('lpg_orders_updated', { detail: created }));
-        }
-        return created;
-      }
-    } catch {
-      // Fallback
-    }
-
-    const fallbackOrder: CustomerOrder = {
-      id: `BK-${Date.now()}`,
-      bookingIdNumber: Math.floor(1000 + Math.random() * 9000),
-      cylinderType: orderData.cylinderType,
+    const payload: Record<string, any> = {
+      cylinderCategory: categoryCode,
       capacityKg: orderData.capacityKg,
       quantity: orderData.quantity,
-      bookingDate: 'Just now',
-      status: 'CONFIRMED',
+      deliveryAddress: orderData.deliveryAddress,
+      paymentMethod: pMethod,
+    };
+
+    if (orderData.distributorId !== undefined && orderData.distributorId !== null) {
+      payload.distributorId = orderData.distributorId;
+    }
+
+    if (profile?.id && !isNaN(Number(profile.id))) {
+      payload.customerId = Number(profile.id);
+    }
+
+    const res = await fetch(`${baseUrl}/api/bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let errMsg = `Booking submission failed (HTTP ${res.status})`;
+      try {
+        const errJson = await res.json();
+        errMsg = errJson.message || errJson.error || errMsg;
+      } catch {
+        try {
+          const errText = await res.text();
+          if (errText) errMsg = errText;
+        } catch {}
+      }
+      throw new Error(errMsg);
+    }
+
+    const saved = await res.json();
+    const created: CustomerOrder = {
+      id: saved.bookingNumber || `LPG${saved.id}`,
+      bookingIdNumber: saved.id,
+      cylinderType: orderData.cylinderType,
+      capacityKg: saved.capacityKg || orderData.capacityKg,
+      quantity: saved.quantity || orderData.quantity,
+      bookingDate: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+      status: saved.status || 'PENDING',
       expectedDelivery: 'Today, 2:30 PM',
-      amount: orderData.capacityKg === 19 ? 1785 : orderData.capacityKg === 5 ? 360 : 853,
-      subsidyAmount: orderData.capacityKg === 14.2 ? 200 : 0,
-      netPayable: orderData.capacityKg === 14.2 ? 653 : 853,
+      amount: saved.totalAmount || (orderData.capacityKg === 19 ? 1785 : orderData.capacityKg === 5 ? 360 : 853),
+      subsidyAmount: saved.subsidyAmount || (orderData.capacityKg === 14.2 ? 200 : 0),
+      netPayable: saved.netAmount || (saved.totalAmount - (saved.subsidyAmount || 0)),
       paymentStatus: 'PENDING',
       paymentMethod: orderData.paymentMethod,
-      deliveryAddress: orderData.deliveryAddress,
+      deliveryAddress: saved.deliveryAddress || orderData.deliveryAddress,
+      deliveryId: String(saved.id),
     };
-    return fallbackOrder;
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('lpg_orders_updated', { detail: created }));
+    }
+    return created;
   }
 
   // -------------------------------------------------------------

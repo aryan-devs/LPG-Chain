@@ -21,6 +21,7 @@ import {
 import QRCode from 'qrcode';
 import { CustomerOrder, CustomerProfileData, SavedAddress, PortalTab } from '../portalTypes';
 import { CustomerService } from '../../../services/customerApi';
+import { DistributorDirectorySummary } from '../../../types/transparencyTypes';
 
 interface PortalBookCylinderViewProps {
   profile: CustomerProfileData;
@@ -41,11 +42,27 @@ export const PortalBookCylinderView: React.FC<PortalBookCylinderViewProps> = ({
     addresses.find((a) => a.isDefault)?.id || addresses[0]?.id || 'addr-custom'
   );
   const [customAddress, setCustomAddress] = useState<string>('');
+  const [distributors, setDistributors] = useState<DistributorDirectorySummary[]>([]);
+  const [selectedDistributorId, setSelectedDistributorId] = useState<number | undefined>(undefined);
+  const [isLoadingDistributors, setIsLoadingDistributors] = useState<boolean>(false);
   const [deliverySlot, setDeliverySlot] = useState<string>('afternoon');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Card' | 'Cash on Delivery'>('UPI');
   const [optInSubsidy, setOptInSubsidy] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsLoadingDistributors(true);
+    CustomerService.getDistributorDirectory()
+      .then((data) => {
+        const activeOnly = Array.isArray(data)
+          ? data.filter((d) => !d.status || d.status.toUpperCase() === 'ACTIVE')
+          : [];
+        setDistributors(activeOnly);
+      })
+      .catch((err) => console.error('Failed to load distributor directory:', err))
+      .finally(() => setIsLoadingDistributors(false));
+  }, []);
 
   // Checkout flow state
   const [createdOrder, setCreatedOrder] = useState<CustomerOrder | null>(null);
@@ -124,6 +141,11 @@ export const PortalBookCylinderView: React.FC<PortalBookCylinderViewProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedDistributorId) {
+      setSubmissionError('Please select an authorized LPG distributor agency to proceed with your booking.');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmissionError(null);
 
@@ -139,6 +161,7 @@ export const PortalBookCylinderView: React.FC<PortalBookCylinderViewProps> = ({
         quantity,
         deliveryAddress: currentAddressText,
         paymentMethod,
+        distributorId: selectedDistributorId,
       });
 
       setCreatedOrder(order);
@@ -827,7 +850,90 @@ export const PortalBookCylinderView: React.FC<PortalBookCylinderViewProps> = ({
             </div>
           </div>
 
-          {/* 3. Delivery Slot & DBTL Subsidy */}
+          {/* 3. LPG Distributor Agency Selection */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <label htmlFor="distributor-select" className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Truck size={16} className="text-rose-600" />
+                Select LPG Distributor Agency <span className="text-rose-600">*</span>
+              </label>
+              {distributors.length > 0 && (
+                <span className="text-xs text-slate-500 font-medium">
+                  {distributors.length} authorized {distributors.length === 1 ? 'agency' : 'agencies'} available
+                </span>
+              )}
+            </div>
+
+            {isLoadingDistributors ? (
+              <div className="py-4 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <RefreshCw size={14} className="animate-spin text-rose-500" />
+                <span>Loading authorized agencies from directory...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <select
+                  id="distributor-select"
+                  value={selectedDistributorId ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedDistributorId(val ? Number(val) : undefined);
+                    if (val && submissionError) {
+                      setSubmissionError(null);
+                    }
+                  }}
+                  className={`w-full p-3.5 rounded-2xl border text-sm text-slate-900 bg-white font-medium focus:ring-2 focus:ring-rose-500 focus:outline-none transition-all cursor-pointer ${
+                    !selectedDistributorId
+                      ? 'border-amber-300 bg-amber-50/20'
+                      : 'border-slate-300'
+                  }`}
+                  required
+                >
+                  <option value="">-- Choose an Authorized LPG Agency --</option>
+                  {distributors.map((dist) => (
+                    <option key={dist.id} value={dist.id}>
+                      {dist.agencyName} — {dist.city || dist.address || 'Regional'} ({dist.pinCode})
+                    </option>
+                  ))}
+                </select>
+
+                {/* Selected Agency Details Preview Card */}
+                {selectedDistributorId ? (
+                  (() => {
+                    const chosen = distributors.find((d) => d.id === selectedDistributorId);
+                    if (!chosen) return null;
+                    return (
+                      <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 flex flex-col gap-2 animate-in fade-in">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                            <CheckCircle size={14} className="text-emerald-600" />
+                            {chosen.agencyName}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-bold">
+                            Active Authorized Agency
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          <MapPin size={12} className="inline mr-1 text-slate-400" />
+                          {chosen.address ? `${chosen.address}, ` : ''}{chosen.city}{chosen.state ? `, ${chosen.state}` : ''} - {chosen.pinCode}
+                        </p>
+                        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60">
+                          <span>Helpline: {chosen.contactNumber || '1800-22-4344'}</span>
+                          <span>Services: {chosen.supportedServices || 'Domestic & Commercial'}</span>
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[12px] text-amber-800 flex items-center gap-2">
+                    <Info size={16} className="text-amber-600 shrink-0" />
+                    <span>Please select an authorized LPG distributor agency to proceed with cylinder delivery dispatch.</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 4. Delivery Slot & DBTL Subsidy */}
           <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 flex flex-col gap-4">
             <label className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <Clock size={16} className="text-rose-600" />
@@ -899,6 +1005,14 @@ export const PortalBookCylinderView: React.FC<PortalBookCylinderViewProps> = ({
               <div className="flex justify-between text-slate-600">
                 <span>Distributor Delivery Fee:</span>
                 <span className="font-semibold text-emerald-600">FREE</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Distributor Agency:</span>
+                <span className="font-semibold text-slate-800 truncate max-w-[150px] text-right">
+                  {distributors.find((d) => d.id === selectedDistributorId)?.agencyName || (
+                    <span className="text-amber-600 font-bold">Select Agency</span>
+                  )}
+                </span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Taxes &amp; GST (5%):</span>

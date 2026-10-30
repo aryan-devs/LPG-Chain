@@ -71,7 +71,7 @@ public class BookingService {
     public List<BookingResponseDTO> getAllBookings() {
         Authentication auth = bookingAuthorizationService.getAuthentication();
         if (bookingAuthorizationService.isAdmin(auth)) {
-            return bookingRepository.findAll().stream()
+            return bookingRepository.findAllWithDetails().stream()
                     .map(entityMapper::toBookingResponseDTO)
                     .toList();
         }
@@ -79,7 +79,7 @@ public class BookingService {
         User currentUser = bookingAuthorizationService.getAuthenticatedUser();
 
         if (bookingAuthorizationService.isCustomer(auth)) {
-            return bookingRepository.findByCustomerId(currentUser.getId()).stream()
+            return bookingRepository.findByCustomerIdWithDetails(currentUser.getId()).stream()
                     .map(entityMapper::toBookingResponseDTO)
                     .toList();
         }
@@ -92,7 +92,7 @@ public class BookingService {
                     .map(Distributor::getId)
                     .filter(Objects::nonNull)
                     .distinct()
-                    .flatMap(distId -> bookingRepository.findByDistributorId(distId).stream())
+                    .flatMap(distId -> bookingRepository.findByDistributorIdWithDetails(distId).stream())
                     .map(entityMapper::toBookingResponseDTO)
                     .toList();
         }
@@ -120,6 +120,10 @@ public class BookingService {
     @Transactional
     public StatusUpdateResult createBookingFromDTO(BookingRequestDTO dto) {
         bookingAuthorizationService.checkCanCreateBooking(dto);
+
+        if (dto.getCustomerId() == null) {
+            return StatusUpdateResult.invalid("customerId is required to create a booking.");
+        }
 
         Optional<User> customerOpt = userRepository.findById(dto.getCustomerId());
         if (customerOpt.isEmpty()) {
@@ -182,13 +186,63 @@ public class BookingService {
         String txnRef = "TXN-DEMO-" + java.util.UUID.randomUUID().toString().substring(0, 10).toUpperCase();
         booking.setPaymentReference(txnRef);
 
+        Distributor resolvedDistributor = null;
         if (dto.getDistributorId() != null) {
             Optional<Distributor> distributorOpt = distributorRepository.findById(dto.getDistributorId());
             if (distributorOpt.isEmpty()) {
-                return StatusUpdateResult.invalid("Distributor not found with id: " + dto.getDistributorId());
+                return StatusUpdateResult.invalid("Selected distributor agency not found with ID: " + dto.getDistributorId());
             }
-            booking.setDistributor(distributorOpt.get());
+            Distributor distributor = distributorOpt.get();
+            if (distributor.getStatus() == null || !distributor.getStatus().trim().equalsIgnoreCase("ACTIVE")) {
+                return StatusUpdateResult.invalid("Selected distributor agency is not active: " + distributor.getAgencyName());
+            }
+            resolvedDistributor = distributor;
+        } else {
+            // Resolve from customer's saved agency selection/profile if that relationship exists:
+            // 1. Most recent active booking for this customer
+            List<Booking> customerPastBookings = bookingRepository.findByCustomerIdWithDetails(customerOpt.get().getId());
+            for (Booking pb : customerPastBookings) {
+                if (pb.getDistributor() != null &&
+                        pb.getDistributor().getStatus() != null &&
+                        pb.getDistributor().getStatus().trim().equalsIgnoreCase("ACTIVE")) {
+                    resolvedDistributor = pb.getDistributor();
+                    break;
+                }
+            }
+
+            // 2. Customer's distributor membership relationship, if any
+            if (resolvedDistributor == null) {
+                List<DistributorMembership> memberships = distributorMembershipRepository.findByUserId(customerOpt.get().getId());
+                for (DistributorMembership m : memberships) {
+                    if (m.getDistributor() != null &&
+                            m.getDistributor().getStatus() != null &&
+                            m.getDistributor().getStatus().trim().equalsIgnoreCase("ACTIVE")) {
+                        resolvedDistributor = m.getDistributor();
+                        break;
+                    }
+                }
+            }
+
+            // 3. Customer's registered postal PIN code matching an active agency
+            if (resolvedDistributor == null && customerOpt.get().getPincode() != null && !customerOpt.get().getPincode().isBlank()) {
+                String pin = customerOpt.get().getPincode().trim();
+                List<Distributor> matchingDistributors = distributorRepository.findAll().stream()
+                        .filter(d -> d.getStatus() != null &&
+                                d.getStatus().trim().equalsIgnoreCase("ACTIVE") &&
+                                pin.equalsIgnoreCase(d.getPinCode() != null ? d.getPinCode().trim() : ""))
+                        .toList();
+                if (!matchingDistributors.isEmpty()) {
+                    resolvedDistributor = matchingDistributors.get(0);
+                }
+            }
+
+            // 4. If no valid agency can be determined, reject the booking with a clear error
+            if (resolvedDistributor == null) {
+                return StatusUpdateResult.invalid("Distributor ID is required. Please select an active LPG distributor agency to place your booking.");
+            }
         }
+
+        booking.setDistributor(resolvedDistributor);
 
         Booking savedBooking = bookingRepository.save(booking);
 
@@ -238,14 +292,14 @@ public class BookingService {
 
     public List<BookingResponseDTO> getBookingsByCustomerId(Long customerId) {
         bookingAuthorizationService.checkCanAccessCustomerBookings(customerId);
-        return bookingRepository.findByCustomerId(customerId).stream()
+        return bookingRepository.findByCustomerIdWithDetails(customerId).stream()
                 .map(entityMapper::toBookingResponseDTO)
                 .toList();
     }
 
     public List<BookingResponseDTO> getBookingsByDistributorId(Long distributorId) {
         bookingAuthorizationService.checkCanAccessDistributorBookings(distributorId);
-        return bookingRepository.findByDistributorId(distributorId).stream()
+        return bookingRepository.findByDistributorIdWithDetails(distributorId).stream()
                 .map(entityMapper::toBookingResponseDTO)
                 .toList();
     }
